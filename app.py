@@ -9,10 +9,10 @@ import plotly.graph_objects as go
 from tensorflow.keras.models import load_model
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN & CSS PRO
+# 1. KONFIGURASI HALAMAN & CSS
 # ==========================================
 st.set_page_config(
     page_title="Sistem Prediksi Perceraian Jabar",
@@ -21,9 +21,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom
+# CSS Custom (Sidebar Fixed)
 st.markdown("""
     <style>
+        /* Hapus MainMenu tapi biarkan Header agar Sidebar Toggle tetap ada */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
@@ -46,16 +47,6 @@ st.markdown("""
             font-family: sans-serif;
         }
         
-        h1 { color: #2c3e50; font-family: 'Helvetica', sans-serif; }
-        
-        div[data-testid="stMetric"] {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
         .insight-box {
             background-color: #e8f4f8;
             border-left: 5px solid #457B9D;
@@ -68,7 +59,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. SETUP PATH & KONSTANTA
+# 2. SETUP PATH & KOORDINAT
 # ==========================================
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -87,39 +78,26 @@ COLOR_MLP = "#E63946"
 COLOR_RF = "#457B9D"
 COLOR_ACTUAL = "#2A9D8F"
 
-# KOORDINAT MANUAL JAWA BARAT (Untuk Peta Tanpa GeoJSON)
+# Koordinat Manual (Karena tidak ada file GeoJSON)
 JABAR_COORDS = {
-    "KABUPATEN BOGOR": [-6.594, 106.789],
-    "KABUPATEN SUKABUMI": [-6.921, 106.927],
-    "KABUPATEN CIANJUR": [-6.817, 107.131],
-    "KABUPATEN BANDUNG": [-7.025, 107.519],
-    "KABUPATEN GARUT": [-7.202, 107.886],
-    "KABUPATEN TASIKMALAYA": [-7.358, 108.106],
-    "KABUPATEN CIAMIS": [-7.327, 108.354],
-    "KABUPATEN KUNINGAN": [-6.976, 108.483],
-    "KABUPATEN CIREBON": [-6.737, 108.549],
-    "KABUPATEN MAJALENGKA": [-6.836, 108.227],
-    "KABUPATEN SUMEDANG": [-6.858, 107.920],
-    "KABUPATEN INDRAMAYU": [-6.327, 108.322],
-    "KABUPATEN SUBANG": [-6.571, 107.760],
-    "KABUPATEN PURWAKARTA": [-6.556, 107.444],
-    "KABUPATEN KARAWANG": [-6.322, 107.306],
-    "KABUPATEN BEKASI": [-6.241, 107.123],
-    "KABUPATEN BANDUNG BARAT": [-6.843, 107.502],
-    "KABUPATEN PANGANDARAN": [-7.696, 108.654],
-    "KOTA BOGOR": [-6.597, 106.799],
-    "KOTA SUKABUMI": [-6.927, 106.929],
-    "KOTA BANDUNG": [-6.917, 107.619],
-    "KOTA CIREBON": [-6.732, 108.552],
-    "KOTA BEKASI": [-6.238, 106.975],
-    "KOTA DEPOK": [-6.402, 106.794],
-    "KOTA CIMAHI": [-6.873, 107.542],
-    "KOTA TASIKMALAYA": [-7.327, 108.220],
+    "KABUPATEN BOGOR": [-6.594, 106.789], "KABUPATEN SUKABUMI": [-6.921, 106.927],
+    "KABUPATEN CIANJUR": [-6.817, 107.131], "KABUPATEN BANDUNG": [-7.025, 107.519],
+    "KABUPATEN GARUT": [-7.202, 107.886], "KABUPATEN TASIKMALAYA": [-7.358, 108.106],
+    "KABUPATEN CIAMIS": [-7.327, 108.354], "KABUPATEN KUNINGAN": [-6.976, 108.483],
+    "KABUPATEN CIREBON": [-6.737, 108.549], "KABUPATEN MAJALENGKA": [-6.836, 108.227],
+    "KABUPATEN SUMEDANG": [-6.858, 107.920], "KABUPATEN INDRAMAYU": [-6.327, 108.322],
+    "KABUPATEN SUBANG": [-6.571, 107.760], "KABUPATEN PURWAKARTA": [-6.556, 107.444],
+    "KABUPATEN KARAWANG": [-6.322, 107.306], "KABUPATEN BEKASI": [-6.241, 107.123],
+    "KABUPATEN BANDUNG BARAT": [-6.843, 107.502], "KABUPATEN PANGANDARAN": [-7.696, 108.654],
+    "KOTA BOGOR": [-6.597, 106.799], "KOTA SUKABUMI": [-6.927, 106.929],
+    "KOTA BANDUNG": [-6.917, 107.619], "KOTA CIREBON": [-6.732, 108.552],
+    "KOTA BEKASI": [-6.238, 106.975], "KOTA DEPOK": [-6.402, 106.794],
+    "KOTA CIMAHI": [-6.873, 107.542], "KOTA TASIKMALAYA": [-7.327, 108.220],
     "KOTA BANJAR": [-7.374, 108.532]
 }
 
 # ==========================================
-# 3. FUNGSI UTAMA (LOAD & CLEAN)
+# 3. LOAD DATA & BERSIHKAN KOLOM
 # ==========================================
 @st.cache_data
 def load_and_clean_data():
@@ -136,7 +114,7 @@ def load_and_clean_data():
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
-            # Hapus semua variasi kata yang tidak perlu
+            # Bersihkan nama kolom yang panjang
             clean = col.replace("Faktor Penyebab Perceraian - ", "") \
                        .replace("Faktor Penyebab Perceraian ", "") \
                        .replace("Faktor Perceraian - ", "") \
@@ -148,22 +126,21 @@ def load_and_clean_data():
                        .replace("Penyebab ", "") \
                        .strip()
             
+            # Jika ada dash "-", ambil kata terakhir
             if " - " in clean:
                 clean = clean.split(" - ")[-1]
             
-            clean = clean.strip("- ")
-            new_cols.append(clean)
+            new_cols.append(clean.strip("- "))
     
     df.columns = new_cols
-    
-    # Normalisasi Nama Wilayah agar Cocok dengan Koordinat (Upper case)
+    # Upper case region agar match dengan koordinat
     df[REGION_COL] = df[REGION_COL].str.upper()
-    
     return df
 
 @st.cache_resource
 def load_system_artifacts(df: pd.DataFrame):
     try:
+        # Identifikasi kolom ulang berdasarkan DF yang sudah bersih
         all_cols = df.columns.tolist()
         feature_cols = [c for c in all_cols if c != TARGET_COL]
         
@@ -201,21 +178,22 @@ years_list = sorted(df[YEAR_COL].unique())
 regions_list = sorted(df[REGION_COL].unique())
 
 # ==========================================
-# 4. SIDEBAR
+# 4. SIDEBAR MENU
 # ==========================================
 with st.sidebar:
     st.title("🎛️ Navigasi")
-    # MENU DIPERBARUI SESUAI REQUEST
+    
     page = st.radio("Menu:", [
         "📊 Dashboard Data", 
-        "📈 Eksplorasi Daerah & Faktor", # New
-        "🗺️ Peta Jawa Barat",           # New
+        "📈 Eksplorasi Daerah & Faktor", 
+        "🗺️ Peta Jawa Barat", 
         "🔮 Prediksi & Perbandingan", 
         "📈 Evaluasi Model"
     ])
     
     st.markdown("---")
     
+    # Filter sesuai halaman
     if page == "📊 Dashboard Data":
         selected_region = st.selectbox("Wilayah:", ["(Semua)"] + regions_list)
         selected_year = st.selectbox("Tahun:", years_list, index=len(years_list)-1)
@@ -249,7 +227,7 @@ with st.sidebar:
 
 # --- PAGE 1: DASHBOARD ---
 if page == "📊 Dashboard Data":
-    st.title("📊 Dashboard Analisis Perceraian")
+    st.title("📊 Dashboard Analisis")
     
     df_view = df.copy()
     if selected_region != "(Semua)":
@@ -269,16 +247,14 @@ if page == "📊 Dashboard Data":
     tab1, tab2 = st.tabs(["📈 Grafik", "📄 Data"])
     
     with tab1:
-        c_g1, c_g2 = st.columns(2)
-        with c_g1:
+        c1, c2 = st.columns(2)
+        with c1:
             st.subheader("Tren Tahunan")
             trend = df_view.groupby(YEAR_COL)[TARGET_COL].sum().reset_index()
-            fig = px.line(trend, x=YEAR_COL, y=TARGET_COL, markers=True, 
-                          color_discrete_sequence=[COLOR_ACTUAL], template="plotly_white")
+            fig = px.line(trend, x=YEAR_COL, y=TARGET_COL, markers=True, color_discrete_sequence=[COLOR_ACTUAL])
             st.plotly_chart(fig, use_container_width=True)
-            
-        with c_g2:
-            st.subheader(f"Penyebab Utama ({selected_year})")
+        with c2:
+            st.subheader("Penyebab Utama")
             f_sum = df_view[df_view[YEAR_COL] == selected_year][factor_cols].sum().reset_index()
             f_sum.columns = ["Faktor", "Jumlah"]
             f_sum = f_sum.sort_values("Jumlah", ascending=True).tail(10)
@@ -286,201 +262,110 @@ if page == "📊 Dashboard Data":
             top_f = f_sum.iloc[-1]['Faktor'] if not f_sum.empty else "-"
             top_v = f_sum.iloc[-1]['Jumlah'] if not f_sum.empty else 0
             
-            fig2 = px.bar(f_sum, x="Jumlah", y="Faktor", orientation='h', text_auto='.2s',
-                          color="Jumlah", color_continuous_scale="Reds", template="plotly_white")
-            fig2.update_layout(yaxis_title=None)
+            fig2 = px.bar(f_sum, x="Jumlah", y="Faktor", orientation='h', color="Jumlah", color_continuous_scale="Reds")
             st.plotly_chart(fig2, use_container_width=True)
             
     with tab2:
         st.dataframe(df_view, use_container_width=True)
         
-    st.markdown(f"""
-    <div class="insight-box">
-        <h4>💡 Insight Dashboard</h4>
-        Pada tahun {selected_year}, faktor penyebab tertinggi adalah <b>"{top_f}"</b> ({top_v:,.0f} kasus).
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='insight-box'><h4>💡 Insight</h4>Faktor tertinggi tahun {selected_year} adalah <b>{top_f}</b> ({top_v:,.0f} kasus).</div>", unsafe_allow_html=True)
 
 
-# --- PAGE 2: EKSPLORASI DAERAH (NEW) ---
+# --- PAGE 2: EKSPLORASI DAERAH (FIXED MELT ERROR) ---
 elif page == "📈 Eksplorasi Daerah & Faktor":
     st.title("📈 Eksplorasi Daerah")
-    st.markdown(f"Perbandingan detail antar wilayah tahun **{exp_year}**.")
-
-    # Data tahun terpilih
+    
     df_exp = df[df[YEAR_COL] == exp_year].copy()
     
-    # 1. Bar Chart Berwarna Warni per Daerah
+    # 1. Bar Chart Warna-warni
     st.subheader(f"Total Kasus per Wilayah ({exp_year})")
-    
-    # Urutkan dari terbesar
     df_sorted = df_exp.sort_values(TARGET_COL, ascending=False)
     
-    # Chart dengan warna beda tiap region (color=REGION_COL)
-    fig_reg = px.bar(
-        df_sorted, 
-        x=REGION_COL, 
-        y=TARGET_COL, 
-        color=REGION_COL,  # Ini kuncinya agar warna beda-beda
-        title="Sebaran Total Kasus per Wilayah",
-        text_auto='.2s',
-        template="plotly_white"
-    )
+    fig_reg = px.bar(df_sorted, x=REGION_COL, y=TARGET_COL, color=REGION_COL, 
+                     title="Perbandingan Total Kasus", text_auto='.2s')
     fig_reg.update_layout(showlegend=False, xaxis_title=None)
     st.plotly_chart(fig_reg, use_container_width=True)
 
-    # 2. Heatmap / Treemap Faktor
-    st.subheader("Komposisi Faktor Penyebab Dominan")
+    # 2. Treemap (Fix Melt Error)
+    st.subheader("Komposisi Faktor")
     
-    # Reshape data untuk treemap
-    # Kita butuh: Region, Faktor, Value
-    melted = df_exp.melt(id_vars=[REGION_COL], value_vars=factor_cols, 
-                         var_name="Faktor", value_name="Jumlah")
+    # Pastikan hanya kolom yang ada di factor_cols yang dimelt
+    valid_cols = [c for c in factor_cols if c in df_exp.columns]
     
-    # Filter hanya yang jumlahnya signifikan (> 0)
-    melted = melted[melted["Jumlah"] > 0]
-    
-    fig_tree = px.treemap(
-        melted, 
-        path=[REGION_COL, "Faktor"], 
-        values="Jumlah",
-        color=REGION_COL,
-        title="Proporsi Faktor Penyebab per Wilayah"
-    )
-    st.plotly_chart(fig_tree, use_container_width=True)
-    
-    st.markdown("""
-    <div class="insight-box">
-        <h4>💡 Insight Daerah</h4>
-        Grafik di atas memudahkan kita melihat daerah mana yang memiliki kasus tertinggi (batang paling tinggi)
-        dan faktor apa yang paling berkontribusi di daerah tersebut (kotak terbesar di Treemap).
-    </div>
-    """, unsafe_allow_html=True)
+    if valid_cols:
+        melted = df_exp.melt(id_vars=[REGION_COL], value_vars=valid_cols, 
+                             var_name="Faktor", value_name="Jumlah")
+        melted = melted[melted["Jumlah"] > 0]
+        
+        fig_tree = px.treemap(melted, path=[REGION_COL, "Faktor"], values="Jumlah", color=REGION_COL)
+        st.plotly_chart(fig_tree, use_container_width=True)
+    else:
+        st.warning("Kolom faktor tidak ditemukan untuk membuat visualisasi.")
 
 
-# --- PAGE 3: PETA JAWA BARAT (NEW - MANUAL MAP) ---
+# --- PAGE 3: PETA JAWA BARAT ---
 elif page == "🗺️ Peta Jawa Barat":
-    st.title("🗺️ Peta Sebaran Perceraian")
-    st.markdown(f"Visualisasi Geografis Data Tahun **{map_year}**")
-
-    # Siapkan Data
+    st.title("🗺️ Peta Sebaran")
+    
     df_map = df[df[YEAR_COL] == map_year].copy()
     
-    # Tambahkan Lat/Long ke Dataframe berdasarkan dictionary JABAR_COORDS
-    latitudes = []
-    longitudes = []
+    # Mapping Koordinat
+    lats, lons = [], []
+    for reg in df_map[REGION_COL]:
+        coords = JABAR_COORDS.get(reg.strip().upper(), [-6.9, 107.6])
+        lats.append(coords[0])
+        lons.append(coords[1])
+        
+    df_map['lat'] = lats
+    df_map['lon'] = lons
     
-    for region in df_map[REGION_COL]:
-        # Coba match nama region dengan dictionary
-        # Normalisasi: Upper case
-        reg_key = region.strip().upper()
-        if reg_key in JABAR_COORDS:
-            latitudes.append(JABAR_COORDS[reg_key][0])
-            longitudes.append(JABAR_COORDS[reg_key][1])
-        else:
-            # Fallback jika nama tidak ketemu (tengah Jabar)
-            latitudes.append(-6.9)
-            longitudes.append(107.6)
-            
-    df_map['lat'] = latitudes
-    df_map['lon'] = longitudes
-    
-    # Buat Peta Scatter Mapbox
     fig_map = px.scatter_mapbox(
-        df_map, 
-        lat="lat", 
-        lon="lon", 
-        size=TARGET_COL, 
-        color=TARGET_COL,
-        hover_name=REGION_COL,
-        hover_data=[TARGET_COL],
-        color_continuous_scale="Reds",
-        size_max=50, 
-        zoom=7.5,
-        mapbox_style="carto-positron", # Style peta terang & bersih
-        title=f"Peta Panas Perceraian {map_year}"
+        df_map, lat="lat", lon="lon", size=TARGET_COL, color=TARGET_COL,
+        hover_name=REGION_COL, color_continuous_scale="Reds", size_max=40, zoom=7.5,
+        mapbox_style="carto-positron", title=f"Peta Panas Perceraian {map_year}"
     )
-    fig_map.update_layout(margin={"r":0,"t":40,"l":0,"b":0}, height=600)
+    fig_map.update_layout(height=600, margin={"r":0,"t":40,"l":0,"b":0})
     st.plotly_chart(fig_map, use_container_width=True)
     
-    st.markdown("""
-    <div class="insight-box">
-        <h4>💡 Cara Membaca Peta</h4>
-        <ul>
-            <li><b>Besar Lingkaran:</b> Menunjukkan jumlah total perceraian. Semakin besar, semakin banyak kasusnya.</li>
-            <li><b>Warna Merah Pekat:</b> Menunjukkan intensitas kasus yang tinggi.</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='insight-box'><h4>💡 Info Peta</h4>Lingkaran merah besar menandakan daerah dengan kasus tertinggi.</div>", unsafe_allow_html=True)
 
 
-# --- PAGE 4: PREDIKSI (SIMPLIFIED) ---
+# --- PAGE 4: PREDIKSI & PERBANDINGAN (REFERENSI STYLE) ---
 elif page == "🔮 Prediksi & Perbandingan":
     st.title("🔮 Prediksi & Komparasi")
-    
-    # 1. SETUP
-    st.subheader("1. Konfigurasi Awal")
-    c1, c2 = st.columns(2)
-    with c1:
-        inp_reg = st.selectbox("Pilih Wilayah:", regions_list)
-    with c2:
-        inp_yr = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
+    st.markdown("Simulasikan prediksi dengan mengubah faktor penyebab tertentu.")
+
+    with st.form("prediction_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            inp_reg = st.selectbox("Pilih Wilayah:", regions_list)
+            inp_yr = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
         
-    # --- LOGIKA SESSION STATE (ANTI KEYERROR) ---
-    reset_needed = False
-    if 'input_data' not in st.session_state:
-        reset_needed = True
-    else:
-        current_keys = list(st.session_state['input_data'].keys())
-        if len(current_keys) > 0 and current_keys[0] not in factor_cols:
-            reset_needed = True
+        with c2:
+            st.markdown("#### Ubah Faktor Penyebab")
+            st.caption("Pilih faktor yang ingin diubah (Multiselect). Faktor yang tidak dipilih akan bernilai 0.")
             
-    if reset_needed:
-        st.session_state['input_data'] = {col: 0 for col in factor_cols}
+            # Multiselect untuk memilih faktor
+            selected_factors = st.multiselect("Pilih Faktor:", factor_cols)
+            
+            inputs = {}
+            if selected_factors:
+                for f in selected_factors:
+                    inputs[f] = st.number_input(f"Nilai {f}:", min_value=0, value=0)
+            
+        submit = st.form_submit_button("🚀 HITUNG PREDIKSI")
 
-    if 'last_region' not in st.session_state:
-        st.session_state['last_region'] = None
-        
-    # Auto-fill jika ganti wilayah
-    if st.session_state['last_region'] != inp_reg:
-        hist = df[df[REGION_COL] == inp_reg]
-        if not hist.empty:
-            defaults = hist[factor_cols].mean().fillna(0).astype(int).to_dict()
-            st.session_state['input_data'] = defaults
-            st.toast(f"Data {inp_reg} dimuat otomatis.", icon="✅")
-        st.session_state['last_region'] = inp_reg
-
-    # 2. INPUT SEDERHANA (DROPDOWN)
-    st.divider()
-    st.subheader("2. Ubah Faktor Penyebab")
-    st.caption("Data sudah terisi otomatis. Ubah hanya jika perlu simulasi.")
-    
-    col_in1, col_in2 = st.columns([1, 1])
-    
-    with col_in1:
-        # Dropdown untuk memilih faktor
-        sel_factor = st.selectbox("👇 Pilih Faktor yang ingin diedit:", factor_cols)
-        
-        # Input Number untuk faktor terpilih
-        curr_val = st.session_state['input_data'].get(sel_factor, 0)
-        new_val = st.number_input(f"Nilai Kasus '{sel_factor}':", min_value=0, value=int(curr_val))
-        st.session_state['input_data'][sel_factor] = new_val
-    
-    with col_in2:
-        # Tampilan Ringkasan Data Real-time (Tabel Kecil)
-        st.markdown("**🔍 Ringkasan Input Saat Ini:**")
-        # Buat dataframe kecil untuk preview
-        preview_df = pd.DataFrame(list(st.session_state['input_data'].items()), columns=['Faktor', 'Nilai'])
-        st.dataframe(preview_df, height=200, use_container_width=True, hide_index=True)
-
-    # 3. TOMBOL PREDIKSI
-    st.divider()
-    if st.button("🚀 PREDIKSI SEKARANG", type="primary", use_container_width=True):
+    if submit:
         if not mlp_model or not rf_model:
-            st.error("Model Error.")
+            st.error("Model belum dimuat.")
         else:
+            # Build Data
             row = {YEAR_COL: inp_yr, REGION_COL: inp_reg}
-            row.update(st.session_state['input_data'])
+            
+            # Isi faktor: yang dipilih pakai input user, sisanya 0
+            for f in factor_cols:
+                row[f] = inputs.get(f, 0)
+                
             df_in = pd.DataFrame([row])[feature_cols]
             
             try:
@@ -488,31 +373,27 @@ elif page == "🔮 Prediksi & Perbandingan":
                 p_mlp = float(mlp_model.predict(X_in).flatten()[0])
                 p_rf = float(rf_model.predict(X_in)[0])
                 
-                st.subheader("🎯 Hasil Analisis AI")
+                st.divider()
+                st.subheader("🎯 Hasil Prediksi")
                 
                 k1, k2, k3 = st.columns(3)
-                k1.metric("MLP (Neural Net)", f"{p_mlp:,.0f}")
-                k2.metric("Random Forest", f"{p_rf:,.0f}")
-                diff = abs(p_mlp - p_rf)
-                k3.metric("Selisih", f"{diff:,.0f}")
+                k1.metric("MLP", f"{p_mlp:,.0f}")
+                k2.metric("RF", f"{p_rf:,.0f}")
+                k3.metric("Selisih", f"{abs(p_mlp - p_rf):,.0f}")
                 
-                dat_comp = pd.DataFrame({
-                    "Model": ["MLP", "Random Forest"], 
+                # Visualisasi
+                res = pd.DataFrame({
+                    "Model": ["MLP", "RF"], 
                     "Prediksi": [p_mlp, p_rf],
                     "Color": [COLOR_MLP, COLOR_RF]
                 })
-                fig = px.bar(dat_comp, x="Model", y="Prediksi", color="Model", text_auto='.2s',
-                             color_discrete_map={"MLP": COLOR_MLP, "Random Forest": COLOR_RF})
+                fig = px.bar(res, x="Model", y="Prediksi", color="Model", text_auto='.2s',
+                             color_discrete_map={"MLP": COLOR_MLP, "RF": COLOR_RF})
                 st.plotly_chart(fig, use_container_width=True)
                 
-                high = "MLP" if p_mlp > p_rf else "RF"
-                st.markdown(f"""
-                <div class="insight-box">
-                    <h4>💡 Kesimpulan Prediksi</h4>
-                    Model <b>{high}</b> memprediksi angka lebih tinggi. Selisih: {diff:,.0f}.
-                </div>""", unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error: {e}")
+
 
 # --- PAGE 5: EVALUASI ---
 elif page == "📈 Evaluasi Model":
@@ -531,11 +412,11 @@ elif page == "📈 Evaluasi Model":
         p_rf = rf_model.predict(X_t)
         
         mae_mlp = mean_absolute_error(y_t, p_mlp)
-        mae_rf = mean_absolute_error(y_t, p_rf)
         rmse_mlp = np.sqrt(mean_squared_error(y_t, p_mlp))
+        mae_rf = mean_absolute_error(y_t, p_rf)
         rmse_rf = np.sqrt(mean_squared_error(y_t, p_rf))
         
-        st.subheader(f"Metric Error ({test_yr})")
+        st.subheader(f"Metrik Error ({test_yr})")
         met = pd.DataFrame({
             "Model": ["MLP", "RF"],
             "MAE": [mae_mlp, mae_rf],
@@ -552,8 +433,4 @@ elif page == "📈 Evaluasi Model":
         st.plotly_chart(fig, use_container_width=True)
         
         best = "MLP" if mae_mlp < mae_rf else "RF"
-        st.markdown(f"""
-        <div class="insight-box">
-            <h4>💡 Kesimpulan Evaluasi</h4>
-            Model <b>{best}</b> lebih akurat (MAE Terkecil: {min(mae_mlp, mae_rf):.2f}).
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"<div class='insight-box'><h4>💡 Kesimpulan</h4>Model <b>{best}</b> lebih akurat.</div>", unsafe_allow_html=True)
