@@ -103,21 +103,20 @@ COLOR_WARN = "#F4A261"    # Oranye
 # ==========================================
 @st.cache_data
 def load_and_clean_data():
-    """Memuat data dan membersihkan nama kolom agar label Dashboard PENDEK."""
+    """Memuat data dan membersihkan nama kolom yang panjang."""
     if not DATA_FILE.exists():
         st.error(f"❌ File data tidak ditemukan di: {DATA_FILE}")
         return pd.DataFrame()
     
     df = pd.read_csv(DATA_FILE)
     
-    # --- LOGIKA CLEANING NAMA KOLOM (UPDATED) ---
+    # --- LOGIKA CLEANING NAMA KOLOM (FIXED) ---
     new_cols = []
     for col in df.columns:
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
             # Hapus semua variasi awalan panjang
-            # Urutan replace PENTING: String terpanjang dulu baru terpendek
             clean = col.replace("Faktor Penyebab Perceraian - ", "") \
                        .replace("Faktor Penyebab Perceraian ", "") \
                        .replace("Faktor Perceraian - ", "") \
@@ -127,8 +126,12 @@ def load_and_clean_data():
                        .replace("Penyebab Perceraian ", "") \
                        .replace("Faktor ", "") \
                        .replace("Penyebab ", "") \
-                       .replace("- ", "") \
                        .strip()
+            
+            # Jika masih ada dash "-", ambil kata terakhir saja (misal "Ekonomi - Miskin" -> "Miskin")
+            if " - " in clean:
+                clean = clean.split(" - ")[-1]
+            
             new_cols.append(clean)
     
     df.columns = new_cols
@@ -317,8 +320,22 @@ elif page == "🔮 Prediksi & Perbandingan":
         inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
 
     # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR ---
+    # FIX: Reset input_data jika nama kolom berubah (misal karena rename) agar tidak KeyError
+    should_reset = False
+    
     if 'input_data' not in st.session_state:
+        should_reset = True
+    else:
+        # Cek apakah kunci yang tersimpan sama dengan kolom baru
+        current_keys = set(st.session_state['input_data'].keys())
+        new_keys = set(factor_cols)
+        # Jika beda, reset agar mengikuti nama kolom baru yang pendek
+        if current_keys != new_keys:
+            should_reset = True
+            
+    if should_reset:
         st.session_state['input_data'] = {col: 0 for col in factor_cols}
+
     if 'last_region' not in st.session_state:
         st.session_state['last_region'] = None
 
@@ -341,8 +358,8 @@ elif page == "🔮 Prediksi & Perbandingan":
         # Dropdown untuk memilih nama faktor
         selected_factor = st.selectbox("👇 Pilih Faktor yang ingin diubah:", factor_cols)
         
-        # Input angka untuk faktor yang dipilih
-        current_val = st.session_state['input_data'][selected_factor]
+        # Input angka untuk faktor yang dipilih (AMAN DARI KEYERROR)
+        current_val = st.session_state['input_data'].get(selected_factor, 0)
         new_val = st.number_input(f"Masukkan Jumlah Kasus Akibat '{selected_factor}':", 
                                   min_value=0, value=int(current_val))
         
@@ -409,6 +426,7 @@ elif page == "🔮 Prediksi & Perbandingan":
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
+                
 
             except Exception as e:
                 st.error(f"Terjadi error saat prediksi: {e}")
