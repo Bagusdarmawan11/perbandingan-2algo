@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom: Menyembunyikan elemen bawaan & Styling Copyright
+# CSS Custom: Menyembunyikan elemen bawaan & Styling Copyright & Insight Box
 st.markdown("""
     <style>
         /* Sembunyikan Menu Hamburger & Footer Streamlit */
@@ -72,6 +72,7 @@ st.markdown("""
             padding: 15px;
             border-radius: 5px;
             margin-top: 20px;
+            margin-bottom: 20px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -115,7 +116,7 @@ def load_and_clean_data():
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
-            # Hapus kata-kata yang tidak perlu
+            # Hapus kata-kata yang tidak perlu agar label pendek
             clean = col.replace("Faktor Penyebab - ", "") \
                        .replace("Faktor Perceraian - ", "") \
                        .replace("Faktor Penyebab ", "") \
@@ -286,7 +287,7 @@ if page == "📊 Dashboard Data":
     # --- INSIGHT BOX (DASHBOARD) ---
     st.markdown(f"""
     <div class="insight-box">
-        <h4>💡 Insight Dashboard</h4>
+        <h4>💡 Kesimpulan Dashboard</h4>
         <ul>
             <li>Pada tahun <b>{selected_year}</b>, tercatat total <b>{total_kasus:,.0f}</b> kasus perceraian di wilayah terpilih.</li>
             <li>Faktor penyebab paling dominan adalah <b>"{top_factor_name}"</b> dengan total <b>{top_factor_val:,.0f}</b> kasus.</li>
@@ -310,7 +311,6 @@ elif page == "🔮 Prediksi & Perbandingan":
         inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
 
     # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR ---
-    # Ini penting agar nilai tidak reset saat ganti dropdown
     if 'input_data' not in st.session_state:
         st.session_state['input_data'] = {col: 0 for col in factor_cols}
     if 'last_region' not in st.session_state:
@@ -327,7 +327,7 @@ elif page == "🔮 Prediksi & Perbandingan":
             st.session_state['input_data'] = {col: 0 for col in factor_cols}
         st.session_state['last_region'] = inp_region
 
-    # 2. Input Faktor (DROPDOWN MODE) 
+    # 2. Input Faktor (DROPDOWN MODE)
     st.markdown("### 2. Parameter Faktor Penyebab")
     st.caption("Pilih faktor dari dropdown di bawah, lalu ubah angkanya.")
     
@@ -395,18 +395,14 @@ elif page == "🔮 Prediksi & Perbandingan":
                 higher_model = "MLP" if val_mlp > val_rf else "Random Forest"
                 st.markdown(f"""
                 <div class="insight-box">
-                    <h4>💡 Kesimpulan & Insight Prediksi</h4>
+                    <h4>💡 Kesimpulan Prediksi</h4>
                     <ul>
                         <li><b>Perbandingan Model:</b> Terdapat selisih sebesar <b>{diff:,.0f}</b> kasus antara kedua algoritma.</li>
                         <li><b>Kecenderungan:</b> Model <b>{higher_model}</b> memberikan prediksi yang lebih tinggi.</li>
-                        <li><b>Rekomendasi:</b> Jika selisih kecil (<10%), hasil prediksi sangat meyakinkan (konsensus kuat). Jika besar, pertimbangkan menggunakan nilai rata-rata kedua model sebagai acuan konservatif.</li>
+                        <li><b>Rekomendasi:</b> Jika selisih kecil (<10%), hasil prediksi sangat meyakinkan. Jika besar, pertimbangkan menggunakan nilai rata-rata kedua model sebagai acuan konservatif.</li>
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
-                 
-
-[Image of Random Forest algorithm diagram]
-
 
             except Exception as e:
                 st.error(f"Terjadi error saat prediksi: {e}")
@@ -474,3 +470,15 @@ elif page == "📈 Evaluasi Model":
             </ul>
         </div>
         """, unsafe_allow_html=True)
+
+        # Tabel Detail Data (Fitur Lama Tetap Ada)
+        with st.expander("🔍 Lihat Data Detail Perbandingan"):
+            detail_df = pd.DataFrame({
+                "Wilayah": df_test[REGION_COL],
+                "Aktual": y_true,
+                "Prediksi MLP": y_mlp,
+                "Prediksi RF": y_rf,
+                "Selisih MLP": np.abs(y_true - y_mlp),
+                "Selisih RF": np.abs(y_true - y_rf)
+            })
+            st.dataframe(detail_df.round(1))
