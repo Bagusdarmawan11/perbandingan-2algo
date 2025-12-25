@@ -103,25 +103,31 @@ COLOR_WARN = "#F4A261"    # Oranye
 # ==========================================
 @st.cache_data
 def load_and_clean_data():
-    """Memuat data dan membersihkan nama kolom yang panjang."""
+    """Memuat data dan membersihkan nama kolom agar label Dashboard PENDEK."""
     if not DATA_FILE.exists():
         st.error(f"❌ File data tidak ditemukan di: {DATA_FILE}")
         return pd.DataFrame()
     
     df = pd.read_csv(DATA_FILE)
     
-    # --- LOGIKA CLEANING NAMA KOLOM ---
+    # --- LOGIKA CLEANING NAMA KOLOM (UPDATED) ---
     new_cols = []
     for col in df.columns:
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
-            # Hapus kata-kata yang tidak perlu agar label pendek
-            clean = col.replace("Faktor Penyebab - ", "") \
+            # Hapus semua variasi awalan panjang
+            # Urutan replace PENTING: String terpanjang dulu baru terpendek
+            clean = col.replace("Faktor Penyebab Perceraian - ", "") \
+                       .replace("Faktor Penyebab Perceraian ", "") \
                        .replace("Faktor Perceraian - ", "") \
+                       .replace("Faktor Perceraian ", "") \
+                       .replace("Faktor Penyebab - ", "") \
                        .replace("Faktor Penyebab ", "") \
+                       .replace("Penyebab Perceraian ", "") \
                        .replace("Faktor ", "") \
                        .replace("Penyebab ", "") \
+                       .replace("- ", "") \
                        .strip()
             new_cols.append(clean)
     
