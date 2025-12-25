@@ -103,20 +103,21 @@ COLOR_WARN = "#F4A261"    # Oranye
 # ==========================================
 @st.cache_data
 def load_and_clean_data():
-    """Memuat data dan membersihkan nama kolom yang panjang."""
+    """Memuat data dan membersihkan nama kolom secara agresif."""
     if not DATA_FILE.exists():
         st.error(f"❌ File data tidak ditemukan di: {DATA_FILE}")
         return pd.DataFrame()
     
     df = pd.read_csv(DATA_FILE)
     
-    # --- LOGIKA CLEANING NAMA KOLOM (FIXED) ---
+    # --- LOGIKA CLEANING LABEL (FIXED) ---
     new_cols = []
     for col in df.columns:
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
-            # Hapus semua variasi awalan panjang
+            # Hapus semua kemungkinan frase "Faktor" dan variasinya
+            # Urutan replace penting: yang panjang dulu baru yang pendek
             clean = col.replace("Faktor Penyebab Perceraian - ", "") \
                        .replace("Faktor Penyebab Perceraian ", "") \
                        .replace("Faktor Perceraian - ", "") \
@@ -128,9 +129,13 @@ def load_and_clean_data():
                        .replace("Penyebab ", "") \
                        .strip()
             
-            # Jika masih ada dash "-", ambil kata terakhir saja (misal "Ekonomi - Miskin" -> "Miskin")
+            # Jika masih ada tanda strip ("-") di tengah (contoh: "Ekonomi - Miskin")
+            # Ambil bagian paling belakang saja ("Miskin")
             if " - " in clean:
                 clean = clean.split(" - ")[-1]
+            
+            # Hapus karakter non-alphanumeric di awal jika ada sisa
+            clean = clean.strip("- ")
             
             new_cols.append(clean)
     
@@ -139,18 +144,13 @@ def load_and_clean_data():
 
 @st.cache_resource
 def load_system_artifacts(df: pd.DataFrame):
-    """
-    Membangun ulang preprocessor dari data bersih & memuat model.
-    """
     try:
-        # 1. Identifikasi Kolom (Dari data yang sudah bersih namanya)
         all_cols = df.columns.tolist()
         feature_cols = [c for c in all_cols if c != TARGET_COL]
         
         categorical_cols = [REGION_COL]
         numeric_cols = [c for c in feature_cols if c not in categorical_cols]
 
-        # 2. Preprocessor (Scaler & Encoder)
         preprocessor = ColumnTransformer(
             transformers=[
                 ("num", StandardScaler(), numeric_cols),
@@ -159,7 +159,6 @@ def load_system_artifacts(df: pd.DataFrame):
         )
         preprocessor.fit(df[feature_cols])
 
-        # 3. Load Model
         mlp_model = load_model(MODEL_MLP_FILE, compile=False) if MODEL_MLP_FILE.exists() else None
         rf_model = joblib.load(MODEL_RF_FILE) if MODEL_RF_FILE.exists() else None
         
@@ -319,35 +318,41 @@ elif page == "🔮 Prediksi & Perbandingan":
     with c2:
         inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
 
-    # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR ---
-    # FIX: Reset input_data jika nama kolom berubah (misal karena rename) agar tidak KeyError
-    should_reset = False
+    # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR (DIPERBAIKI) ---
+    # Logika: Jika session state 'input_data' kosong, atau kuncinya masih pakai nama lama (panjang),
+    # Maka kita harus meresetnya paksa ke nama baru (pendek) agar tidak error KeyError.
     
+    reset_needed = False
+    
+    # 1. Cek apakah session state input_data sudah ada
     if 'input_data' not in st.session_state:
-        should_reset = True
+        reset_needed = True
     else:
-        # Cek apakah kunci yang tersimpan sama dengan kolom baru
-        current_keys = set(st.session_state['input_data'].keys())
-        new_keys = set(factor_cols)
-        # Jika beda, reset agar mengikuti nama kolom baru yang pendek
-        if current_keys != new_keys:
-            should_reset = True
-            
-    if should_reset:
+        # 2. Cek apakah kuncinya cocok dengan kolom baru?
+        current_keys = list(st.session_state['input_data'].keys())
+        # Ambil satu contoh kunci untuk dicek
+        if len(current_keys) > 0:
+            first_key = current_keys[0]
+            # Jika kunci session state tidak ada di daftar factor_cols yang baru (pendek), berarti itu data lama
+            if first_key not in factor_cols:
+                reset_needed = True
+        else:
+            reset_needed = True # Jika kosong, reset
+    
+    # Lakukan reset jika diperlukan
+    if reset_needed:
         st.session_state['input_data'] = {col: 0 for col in factor_cols}
 
+    # Auto-fill Logic
     if 'last_region' not in st.session_state:
         st.session_state['last_region'] = None
 
-    # Jika ganti wilayah, auto-fill ulang (sekali saja)
     if st.session_state['last_region'] != inp_region:
         hist_data = df[df[REGION_COL] == inp_region]
         if not hist_data.empty:
             defaults = hist_data[factor_cols].mean().fillna(0).astype(int).to_dict()
             st.session_state['input_data'] = defaults
             st.toast(f"Data otomatis diisi rata-rata {inp_region}", icon="✅")
-        else:
-            st.session_state['input_data'] = {col: 0 for col in factor_cols}
         st.session_state['last_region'] = inp_region
 
     # 2. Input Faktor (DROPDOWN MODE)
@@ -358,15 +363,15 @@ elif page == "🔮 Prediksi & Perbandingan":
         # Dropdown untuk memilih nama faktor
         selected_factor = st.selectbox("👇 Pilih Faktor yang ingin diubah:", factor_cols)
         
-        # Input angka untuk faktor yang dipilih (AMAN DARI KEYERROR)
+        # Gunakan .get() untuk keamanan ekstra agar tidak KeyError
         current_val = st.session_state['input_data'].get(selected_factor, 0)
+        
         new_val = st.number_input(f"Masukkan Jumlah Kasus Akibat '{selected_factor}':", 
                                   min_value=0, value=int(current_val))
         
         # Simpan perubahan ke session state
         st.session_state['input_data'][selected_factor] = new_val
         
-        # Tampilkan ringkasan data yang akan diprediksi
         with st.expander("📄 Lihat Ringkasan Semua Data Input"):
             st.json(st.session_state['input_data'])
 
