@@ -64,6 +64,15 @@ st.markdown("""
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
+
+        /* Styling Insight Box */
+        .insight-box {
+            background-color: #e8f4f8;
+            border-left: 5px solid #457B9D;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -101,7 +110,6 @@ def load_and_clean_data():
     df = pd.read_csv(DATA_FILE)
     
     # --- LOGIKA CLEANING NAMA KOLOM ---
-    # Menghapus berbagai variasi awalan agar label jadi singkat & enak dibaca
     new_cols = []
     for col in df.columns:
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
@@ -187,7 +195,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Tombol Reset Cache (Solusi jika tampilan stuck)
+    # Tombol Reset Cache
     if st.button("🔄 Refresh / Clear Cache"):
         st.cache_data.clear()
         st.rerun()
@@ -238,7 +246,7 @@ if page == "📊 Dashboard Data":
     
     st.markdown("---")
     
-    # Tabs untuk memisahkan Grafik dan Tabel (Biar tidak hilang fiturnya)
+    # Tabs
     tab1, tab2 = st.tabs(["📈 Visualisasi Grafik", "📄 Data Mentah"])
     
     with tab1:
@@ -254,12 +262,16 @@ if page == "📊 Dashboard Data":
             st.plotly_chart(fig_trend, use_container_width=True)
             
         with col_g2:
-            st.subheader(f"Top 10 Penyebab ({selected_year})")
+            st.subheader(f"Top Penyebab ({selected_year})")
             # Hitung total per faktor
             factors_sum = df_view[df_view[YEAR_COL] == selected_year][factor_cols].sum()
             df_factors = factors_sum.reset_index()
             df_factors.columns = ["Faktor", "Jumlah"]
             df_factors = df_factors.sort_values("Jumlah", ascending=True).tail(10)
+            
+            # Ambil faktor dominan untuk insight
+            top_factor_name = df_factors.iloc[-1]['Faktor'] if not df_factors.empty else "-"
+            top_factor_val = df_factors.iloc[-1]['Jumlah'] if not df_factors.empty else 0
             
             fig_bar = px.bar(df_factors, x="Jumlah", y="Faktor", orientation='h',
                              text_auto='.2s', color="Jumlah", 
@@ -271,60 +283,80 @@ if page == "📊 Dashboard Data":
         st.subheader("Dataset Lengkap")
         st.dataframe(df_view, use_container_width=True)
 
+    # --- INSIGHT BOX (DASHBOARD) ---
+    st.markdown(f"""
+    <div class="insight-box">
+        <h4>💡 Insight Dashboard</h4>
+        <ul>
+            <li>Pada tahun <b>{selected_year}</b>, tercatat total <b>{total_kasus:,.0f}</b> kasus perceraian di wilayah terpilih.</li>
+            <li>Faktor penyebab paling dominan adalah <b>"{top_factor_name}"</b> dengan total <b>{top_factor_val:,.0f}</b> kasus.</li>
+            <li>Analisis ini membantu pemerintah untuk memprioritaskan penanganan pada faktor penyebab utama.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # --- PAGE 2: PREDIKSI & PERBANDINGAN ---
 elif page == "🔮 Prediksi & Perbandingan":
     st.title("🔮 Prediksi Interaktif & Komparasi")
-    st.markdown("Masukkan data parameter di bawah untuk memprediksi jumlah perceraian menggunakan **dua algoritma** sekaligus.")
+    st.markdown("Prediksi jumlah perceraian menggunakan **MLP vs Random Forest**.")
 
-    # Container Form Input
-    with st.container():
-        st.subheader("1. Konfigurasi Wilayah")
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            inp_region = st.selectbox("Pilih Kabupaten/Kota:", regions_list)
-        with c2:
-            inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
-            
-        # LOGIKA AUTO-FILL PINTAR
-        # Mengambil rata-rata historis dari kota tersebut
+    # 1. Konfigurasi Wilayah
+    st.subheader("1. Konfigurasi Wilayah & Waktu")
+    c1, c2 = st.columns(2)
+    with c1:
+        inp_region = st.selectbox("Pilih Kabupaten/Kota:", regions_list)
+    with c2:
+        inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
+
+    # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR ---
+    # Ini penting agar nilai tidak reset saat ganti dropdown
+    if 'input_data' not in st.session_state:
+        st.session_state['input_data'] = {col: 0 for col in factor_cols}
+    if 'last_region' not in st.session_state:
+        st.session_state['last_region'] = None
+
+    # Jika ganti wilayah, auto-fill ulang (sekali saja)
+    if st.session_state['last_region'] != inp_region:
         hist_data = df[df[REGION_COL] == inp_region]
         if not hist_data.empty:
             defaults = hist_data[factor_cols].mean().fillna(0).astype(int).to_dict()
-            st.success(f"✅ Data faktor otomatis diisi dengan nilai rata-rata historis **{inp_region}**. Silakan sesuaikan jika perlu.")
+            st.session_state['input_data'] = defaults
+            st.toast(f"Data otomatis diisi rata-rata {inp_region}", icon="✅")
         else:
-            defaults = {c: 0 for c in factor_cols}
+            st.session_state['input_data'] = {col: 0 for col in factor_cols}
+        st.session_state['last_region'] = inp_region
 
+    # 2. Input Faktor (DROPDOWN MODE) 
     st.markdown("### 2. Parameter Faktor Penyebab")
-    st.markdown("Silakan ubah angka di bawah ini untuk simulasi skenario (misal: *Bagaimana jika Ekonomi memburuk?*)")
+    st.caption("Pilih faktor dari dropdown di bawah, lalu ubah angkanya.")
     
-    # FITUR DROPDOWN (EXPANDER) UNTUK FORM YANG RAPI
-    with st.expander("👇 KLIK DISINI UNTUK MENGUBAH ANGKA FAKTOR", expanded=True):
-        input_dict = {}
-        # Grid layout 3 kolom
-        grid_cols = st.columns(3)
-        for i, col in enumerate(factor_cols):
-            with grid_cols[i % 3]:
-                # Label 'col' di sini sudah bersih/pendek
-                input_dict[col] = st.number_input(
-                    label=col,
-                    min_value=0,
-                    value=int(defaults.get(col, 0)),
-                    key=f"input_{col}"
-                )
+    with st.container(border=True):
+        # Dropdown untuk memilih nama faktor
+        selected_factor = st.selectbox("👇 Pilih Faktor yang ingin diubah:", factor_cols)
+        
+        # Input angka untuk faktor yang dipilih
+        current_val = st.session_state['input_data'][selected_factor]
+        new_val = st.number_input(f"Masukkan Jumlah Kasus Akibat '{selected_factor}':", 
+                                  min_value=0, value=int(current_val))
+        
+        # Simpan perubahan ke session state
+        st.session_state['input_data'][selected_factor] = new_val
+        
+        # Tampilkan ringkasan data yang akan diprediksi
+        with st.expander("📄 Lihat Ringkasan Semua Data Input"):
+            st.json(st.session_state['input_data'])
 
     # Tombol Eksekusi
     if st.button("🚀 Jalankan Prediksi", type="primary", use_container_width=True):
         if not mlp_model or not rf_model:
             st.error("❌ Model AI belum dimuat. Cek folder 'models/'.")
         else:
-            # Siapkan data input
+            # Siapkan data input dari Session State
             row_data = {YEAR_COL: inp_year, REGION_COL: inp_region}
-            row_data.update(input_dict)
+            row_data.update(st.session_state['input_data'])
             
             df_pred = pd.DataFrame([row_data])
-            # Pastikan urutan kolom sesuai training
             df_pred = df_pred[feature_cols]
 
             try:
@@ -341,15 +373,13 @@ elif page == "🔮 Prediksi & Perbandingan":
                 st.divider()
                 st.subheader("🎯 Hasil Prediksi AI")
                 
-                # Tampilan Metrik
                 k1, k2, k3 = st.columns(3)
-                k1.metric("MLP (Neural Network)", f"{val_mlp:,.0f}", delta="Deep Learning", delta_color="normal")
-                k2.metric("Random Forest", f"{val_rf:,.0f}", delta="Ensemble", delta_color="normal")
-                
+                k1.metric("MLP (Neural Network)", f"{val_mlp:,.0f}", delta="Deep Learning")
+                k2.metric("Random Forest", f"{val_rf:,.0f}", delta="Ensemble")
                 diff = abs(val_mlp - val_rf)
-                k3.metric("Selisih Prediksi", f"{diff:,.0f}", delta="Divergensi Model", delta_color="inverse")
+                k3.metric("Selisih Prediksi", f"{diff:,.0f}", delta_color="inverse")
                 
-                # Visualisasi Perbandingan
+                # Chart
                 comp_data = pd.DataFrame({
                     "Model AI": ["MLP (Neural Net)", "Random Forest"],
                     "Prediksi Jumlah": [val_mlp, val_rf],
@@ -360,10 +390,23 @@ elif page == "🔮 Prediksi & Perbandingan":
                                   title="Komparasi Hasil Prediksi", text_auto='.2s',
                                   color_discrete_map={"MLP (Neural Net)": COLOR_MLP, "Random Forest": COLOR_RF})
                 st.plotly_chart(fig_comp, use_container_width=True)
-                
-                # Insight Text
-                st.caption(f"ℹ️ **Insight:** Model MLP memprediksi **{val_mlp:,.0f}** kasus, sedangkan Random Forest memprediksi **{val_rf:,.0f}** kasus. "
-                           "Perbedaan hasil adalah wajar karena cara kerja matematis kedua algoritma yang berbeda.")
+
+                # --- INSIGHT BOX (PREDIKSI) ---
+                higher_model = "MLP" if val_mlp > val_rf else "Random Forest"
+                st.markdown(f"""
+                <div class="insight-box">
+                    <h4>💡 Kesimpulan & Insight Prediksi</h4>
+                    <ul>
+                        <li><b>Perbandingan Model:</b> Terdapat selisih sebesar <b>{diff:,.0f}</b> kasus antara kedua algoritma.</li>
+                        <li><b>Kecenderungan:</b> Model <b>{higher_model}</b> memberikan prediksi yang lebih tinggi.</li>
+                        <li><b>Rekomendasi:</b> Jika selisih kecil (<10%), hasil prediksi sangat meyakinkan (konsensus kuat). Jika besar, pertimbangkan menggunakan nilai rata-rata kedua model sebagai acuan konservatif.</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+                 
+
+[Image of Random Forest algorithm diagram]
+
 
             except Exception as e:
                 st.error(f"Terjadi error saat prediksi: {e}")
@@ -372,7 +415,7 @@ elif page == "🔮 Prediksi & Perbandingan":
 # --- PAGE 3: EVALUASI MODEL ---
 elif page == "📈 Evaluasi Model":
     st.title("📈 Evaluasi Kinerja Model")
-    st.markdown("Halaman ini menguji keakuratan model menggunakan data tahun terakhir (**Testing Data**) yang tersedia di dataset.")
+    st.markdown("Evaluasi akurasi menggunakan data tahun terakhir (Testing Data).")
     
     test_yr = years_list[-1]
     df_test = df[df[YEAR_COL] == test_yr].copy()
@@ -380,7 +423,7 @@ elif page == "📈 Evaluasi Model":
     if df_test.empty:
         st.warning("Data tidak cukup untuk evaluasi.")
     else:
-        # Preprocessing & Prediksi Batch
+        # Proses Evaluasi
         X_test = preprocessor.transform(df_test[feature_cols])
         y_true = df_test[TARGET_COL].values
         
@@ -394,7 +437,6 @@ elif page == "📈 Evaluasi Model":
         mae_rf = mean_absolute_error(y_true, y_rf)
         rmse_rf = np.sqrt(mean_squared_error(y_true, y_rf))
         
-        # Tampilkan Tabel Metrik (Tanpa style.format agar tidak error)
         st.subheader(f"📊 Tabel Error (Data Tahun {test_yr})")
         
         metrics = pd.DataFrame({
@@ -404,42 +446,31 @@ elif page == "📈 Evaluasi Model":
         })
         st.table(metrics.set_index("Model").round(2))
         
-        st.markdown("> *Semakin KECIL nilai MAE dan RMSE, semakin AKURAT model tersebut.*")
-        
-        st.markdown("---")
-        
-        # Plot Scatter (Visualisasi Akurasi)
+        # Plot Scatter
         st.subheader("🎯 Validasi Visual: Aktual vs Prediksi")
-        
         fig_sc = go.Figure()
-        
-        # Garis Referensi
         min_v, max_v = y_true.min(), y_true.max()
         fig_sc.add_trace(go.Scatter(x=[min_v, max_v], y=[min_v, max_v], 
                                     mode='lines', name='Perfect Prediction',
                                     line=dict(color='gray', dash='dash')))
-        
-        # Scatter MLP
         fig_sc.add_trace(go.Scatter(x=y_true, y=y_mlp, mode='markers', name='MLP',
                                     marker=dict(color=COLOR_MLP, size=10, opacity=0.7)))
-        
-        # Scatter RF
         fig_sc.add_trace(go.Scatter(x=y_true, y=y_rf, mode='markers', name='Random Forest',
                                     marker=dict(color=COLOR_RF, size=10, symbol='x')))
-        
-        fig_sc.update_layout(xaxis_title="Jumlah Aktual (Real)", yaxis_title="Jumlah Prediksi Model",
-                             height=500, title="Sebaran Data (Titik mendekati garis putus-putus = Akurat)")
-        
+        fig_sc.update_layout(xaxis_title="Jumlah Aktual", yaxis_title="Prediksi", height=500)
         st.plotly_chart(fig_sc, use_container_width=True)
         
-        # Tabel Detail Data
-        with st.expander("🔍 Lihat Data Detail Perbandingan"):
-            detail_df = pd.DataFrame({
-                "Wilayah": df_test[REGION_COL],
-                "Aktual": y_true,
-                "Prediksi MLP": y_mlp,
-                "Prediksi RF": y_rf,
-                "Selisih MLP": np.abs(y_true - y_mlp),
-                "Selisih RF": np.abs(y_true - y_rf)
-            })
-            st.dataframe(detail_df.round(1))
+        # --- INSIGHT BOX (EVALUASI) ---
+        best_model_mae = "MLP" if mae_mlp < mae_rf else "Random Forest"
+        best_val_mae = min(mae_mlp, mae_rf)
+        
+        st.markdown(f"""
+        <div class="insight-box">
+            <h4>💡 Kesimpulan Evaluasi</h4>
+            <ul>
+                <li><b>Model Terbaik (MAE):</b> Berdasarkan Mean Absolute Error, model <b>{best_model_mae}</b> lebih akurat dengan rata-rata kesalahan prediksi hanya <b>{best_val_mae:.2f}</b> kasus.</li>
+                <li><b>Interpretasi Grafik:</b> Titik-titik yang semakin dekat dengan garis putus-putus menunjukkan prediksi yang sangat akurat.</li>
+                <li><b>Saran:</b> Gunakan model <b>{best_model_mae}</b> sebagai acuan utama dalam pengambilan keputusan.</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
