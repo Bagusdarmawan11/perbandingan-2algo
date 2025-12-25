@@ -21,13 +21,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom: Menyembunyikan elemen bawaan & Styling Copyright & Insight Box
+# CSS Custom
 st.markdown("""
     <style>
-        /* Sembunyikan Menu Hamburger & Footer Streamlit */
+        /* Sembunyikan Menu Hamburger & Footer Streamlit (Header dibiarkan agar sidebar tidak hilang) */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        header {visibility: hidden;}
         
         /* Styling Sidebar agar lebih rapi */
         [data-testid="stSidebar"] {
@@ -110,14 +109,13 @@ def load_and_clean_data():
     
     df = pd.read_csv(DATA_FILE)
     
-    # --- LOGIKA CLEANING LABEL (FIXED) ---
+    # --- LOGIKA CLEANING LABEL ---
     new_cols = []
     for col in df.columns:
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
             # Hapus semua kemungkinan frase "Faktor" dan variasinya
-            # Urutan replace penting: yang panjang dulu baru yang pendek
             clean = col.replace("Faktor Penyebab Perceraian - ", "") \
                        .replace("Faktor Penyebab Perceraian ", "") \
                        .replace("Faktor Perceraian - ", "") \
@@ -162,9 +160,6 @@ def load_system_artifacts(df: pd.DataFrame):
         mlp_model = load_model(MODEL_MLP_FILE, compile=False) if MODEL_MLP_FILE.exists() else None
         rf_model = joblib.load(MODEL_RF_FILE) if MODEL_RF_FILE.exists() else None
         
-        if not mlp_model or not rf_model:
-            st.warning("⚠️ Salah satu model (MLP/RF) tidak ditemukan di folder models/.")
-
         return preprocessor, mlp_model, rf_model, feature_cols, numeric_cols
 
     except Exception as e:
@@ -175,7 +170,7 @@ def load_system_artifacts(df: pd.DataFrame):
 df = load_and_clean_data()
 
 if df.empty:
-    st.stop() # Hentikan jika data kosong
+    st.stop()
 
 preprocessor, mlp_model, rf_model, feature_cols, numeric_cols = load_system_artifacts(df)
 
@@ -204,7 +199,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Tombol Reset Cache
+    # Tombol Reset Cache (PENTING UNTUK MEMBERSIHKAN NAMA LAMA)
     if st.button("🔄 Refresh / Clear Cache"):
         st.cache_data.clear()
         st.rerun()
@@ -215,7 +210,7 @@ with st.sidebar:
         "2. **Random Forest**: Ensemble Learning."
     )
     
-    # COPYRIGHT FOOTER (HTML)
+    # COPYRIGHT FOOTER
     st.sidebar.markdown(
         """
         <div class='sidebar-copyright'>
@@ -263,7 +258,6 @@ if page == "📊 Dashboard Data":
         
         with col_g1:
             st.subheader("Tren Kasus Perceraian")
-            # Agregasi per tahun
             trend = df_view.groupby(YEAR_COL)[TARGET_COL].sum().reset_index()
             fig_trend = px.line(trend, x=YEAR_COL, y=TARGET_COL, markers=True,
                                 title=f"Tren Tahunan ({selected_region})",
@@ -272,7 +266,6 @@ if page == "📊 Dashboard Data":
             
         with col_g2:
             st.subheader(f"Top Penyebab ({selected_year})")
-            # Hitung total per faktor
             factors_sum = df_view[df_view[YEAR_COL] == selected_year][factor_cols].sum()
             df_factors = factors_sum.reset_index()
             df_factors.columns = ["Faktor", "Jumlah"]
@@ -292,7 +285,7 @@ if page == "📊 Dashboard Data":
         st.subheader("Dataset Lengkap")
         st.dataframe(df_view, use_container_width=True)
 
-    # --- INSIGHT BOX (DASHBOARD) ---
+    # --- INSIGHT BOX ---
     st.markdown(f"""
     <div class="insight-box">
         <h4>💡 Kesimpulan Dashboard</h4>
@@ -318,41 +311,36 @@ elif page == "🔮 Prediksi & Perbandingan":
     with c2:
         inp_year = st.number_input("Tahun Prediksi:", 2000, 2030, 2025)
 
-    # --- LOGIKA SESSION STATE UNTUK INPUT FAKTOR (DIPERBAIKI) ---
-    # Logika: Jika session state 'input_data' kosong, atau kuncinya masih pakai nama lama (panjang),
-    # Maka kita harus meresetnya paksa ke nama baru (pendek) agar tidak error KeyError.
-    
+    # --- LOGIKA SESSION STATE (Anti-Error) ---
     reset_needed = False
     
-    # 1. Cek apakah session state input_data sudah ada
+    # Cek ketersediaan session state
     if 'input_data' not in st.session_state:
         reset_needed = True
     else:
-        # 2. Cek apakah kuncinya cocok dengan kolom baru?
+        # Cek apakah kunci lama masih dipakai? (Jika ya, reset ke kunci baru yang pendek)
         current_keys = list(st.session_state['input_data'].keys())
-        # Ambil satu contoh kunci untuk dicek
         if len(current_keys) > 0:
-            first_key = current_keys[0]
-            # Jika kunci session state tidak ada di daftar factor_cols yang baru (pendek), berarti itu data lama
-            if first_key not in factor_cols:
+            if current_keys[0] not in factor_cols:
                 reset_needed = True
         else:
-            reset_needed = True # Jika kosong, reset
-    
-    # Lakukan reset jika diperlukan
+            reset_needed = True
+            
     if reset_needed:
         st.session_state['input_data'] = {col: 0 for col in factor_cols}
 
-    # Auto-fill Logic
     if 'last_region' not in st.session_state:
         st.session_state['last_region'] = None
 
+    # Auto-fill Logic
     if st.session_state['last_region'] != inp_region:
         hist_data = df[df[REGION_COL] == inp_region]
         if not hist_data.empty:
             defaults = hist_data[factor_cols].mean().fillna(0).astype(int).to_dict()
             st.session_state['input_data'] = defaults
             st.toast(f"Data otomatis diisi rata-rata {inp_region}", icon="✅")
+        else:
+            st.session_state['input_data'] = {col: 0 for col in factor_cols}
         st.session_state['last_region'] = inp_region
 
     # 2. Input Faktor (DROPDOWN MODE)
@@ -360,16 +348,14 @@ elif page == "🔮 Prediksi & Perbandingan":
     st.caption("Pilih faktor dari dropdown di bawah, lalu ubah angkanya.")
     
     with st.container(border=True):
-        # Dropdown untuk memilih nama faktor
         selected_factor = st.selectbox("👇 Pilih Faktor yang ingin diubah:", factor_cols)
         
-        # Gunakan .get() untuk keamanan ekstra agar tidak KeyError
+        # Ambil nilai saat ini dengan .get() agar aman
         current_val = st.session_state['input_data'].get(selected_factor, 0)
         
         new_val = st.number_input(f"Masukkan Jumlah Kasus Akibat '{selected_factor}':", 
                                   min_value=0, value=int(current_val))
         
-        # Simpan perubahan ke session state
         st.session_state['input_data'][selected_factor] = new_val
         
         with st.expander("📄 Lihat Ringkasan Semua Data Input"):
@@ -380,7 +366,7 @@ elif page == "🔮 Prediksi & Perbandingan":
         if not mlp_model or not rf_model:
             st.error("❌ Model AI belum dimuat. Cek folder 'models/'.")
         else:
-            # Siapkan data input dari Session State
+            # Siapkan data input
             row_data = {YEAR_COL: inp_year, REGION_COL: inp_region}
             row_data.update(st.session_state['input_data'])
             
@@ -419,7 +405,7 @@ elif page == "🔮 Prediksi & Perbandingan":
                                   color_discrete_map={"MLP (Neural Net)": COLOR_MLP, "Random Forest": COLOR_RF})
                 st.plotly_chart(fig_comp, use_container_width=True)
 
-                # --- INSIGHT BOX (PREDIKSI) ---
+                # --- INSIGHT BOX ---
                 higher_model = "MLP" if val_mlp > val_rf else "Random Forest"
                 st.markdown(f"""
                 <div class="insight-box">
@@ -431,7 +417,6 @@ elif page == "🔮 Prediksi & Perbandingan":
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
-                
 
             except Exception as e:
                 st.error(f"Terjadi error saat prediksi: {e}")
@@ -485,7 +470,7 @@ elif page == "📈 Evaluasi Model":
         fig_sc.update_layout(xaxis_title="Jumlah Aktual", yaxis_title="Prediksi", height=500)
         st.plotly_chart(fig_sc, use_container_width=True)
         
-        # --- INSIGHT BOX (EVALUASI) ---
+        # --- INSIGHT BOX ---
         best_model_mae = "MLP" if mae_mlp < mae_rf else "Random Forest"
         best_val_mae = min(mae_mlp, mae_rf)
         
@@ -500,7 +485,7 @@ elif page == "📈 Evaluasi Model":
         </div>
         """, unsafe_allow_html=True)
 
-        # Tabel Detail Data (Fitur Lama Tetap Ada)
+        # Tabel Detail Data
         with st.expander("🔍 Lihat Data Detail Perbandingan"):
             detail_df = pd.DataFrame({
                 "Wilayah": df_test[REGION_COL],
