@@ -15,7 +15,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 # 1. KONFIGURASI HALAMAN & PATH
 # ==========================================
 st.set_page_config(
-    page_title="Prediksi Perceraian Jabar (MLP vs RF)",
+    page_title="Prediksi Perceraian Jabar",
     page_icon="💔",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,7 +31,7 @@ DATA_FILE = DATA_DIR / "Dataset Jumlah Perceraian Kabupaten Kota Jawa Barat.csv"
 MODEL_MLP_FILE = MODELS_DIR / "model_mlp.h5"
 MODEL_RF_FILE = MODELS_DIR / "model_rf.joblib"
 
-# Nama Kolom (Konstanta)
+# Nama Kolom Asli (Target & Tahun biasanya tetap)
 TARGET_COL = "Jumlah"
 YEAR_COL = "Tahun"
 REGION_COL = "Kabupaten/Kota"
@@ -42,7 +42,7 @@ COLOR_RF = "#1F77B4"   # Biru
 COLOR_ACTUAL = "#2CA02C" # Hijau
 
 # ==========================================
-# 2. FUNGSI LOAD DATA & CLEANING
+# 2. FUNGSI LOAD DATA & CLEANING (DIPERBAIKI)
 # ==========================================
 @st.cache_data
 def load_dataset():
@@ -53,14 +53,18 @@ def load_dataset():
     
     df = pd.read_csv(DATA_FILE)
     
-    # --- CLEANING NAMA KOLOM (SESUAI REQUEST) ---
-    # Menghapus awalan panjang agar label jadi singkat (misal: "Faktor Ekonomi" -> "Ekonomi")
-    new_columns = []
+    # --- PERBAIKAN: MEMBERSIHKAN NAMA KOLOM ---
+    # Menghapus berbagai variasi awalan agar label jadi singkat
+    clean_columns = []
     for col in df.columns:
-        clean_name = col.replace("Faktor Penyebab - ", "").replace("Faktor ", "")
-        new_columns.append(clean_name)
-    df.columns = new_columns
+        # Hapus "Faktor Perceraian - ", "Faktor Penyebab - ", dll
+        new_name = col.replace("Faktor Perceraian - ", "") \
+                      .replace("Faktor Penyebab - ", "") \
+                      .replace("Faktor ", "") \
+                      .strip() # Hapus spasi berlebih
+        clean_columns.append(new_name)
     
+    df.columns = clean_columns
     return df
 
 @st.cache_resource
@@ -69,14 +73,14 @@ def load_artifacts(df: pd.DataFrame):
     Memuat Model MLP & RF serta membangun ulang Preprocessor.
     """
     try:
-        # 1. Identifikasi Kolom (Otomatis dari dataframe yang sudah di-clean namanya)
+        # 1. Identifikasi Kolom (Otomatis dari dataframe yang sudah di-clean)
         all_cols = df.columns.tolist()
         feature_cols = [c for c in all_cols if c != TARGET_COL]
         
         categorical_cols = [REGION_COL]
         numeric_cols = [c for c in feature_cols if c not in categorical_cols]
 
-        # 2. Bangun & Fit Preprocessor (Penting: Fit ulang dengan nama kolom baru)
+        # 2. Bangun & Fit Preprocessor (Fit ulang dengan nama kolom baru yang pendek)
         preprocessor = ColumnTransformer(
             transformers=[
                 ("num", StandardScaler(), numeric_cols),
@@ -123,7 +127,8 @@ regions_list = sorted(df[REGION_COL].unique())
 # 3. SIDEBAR (NAVIGASI & FILTER)
 # ==========================================
 with st.sidebar:
-    # Logo dihapus sesuai request
+    # 1. LOGO DIHAPUS (Sesuai Request)
+    
     st.title("🎛️ Navigasi")
     
     page = st.radio("Pilih Halaman:", ["📊 Dashboard Data", "🔮 Prediksi & Perbandingan", "📈 Evaluasi Model"])
@@ -136,14 +141,14 @@ with st.sidebar:
         selected_region_sidebar = st.selectbox("Pilih Wilayah:", ["(Semua)"] + regions_list)
         selected_year_sidebar = st.selectbox("Pilih Tahun:", years_list, index=len(years_list)-1)
     
-    # Footer Copyright (Posisi Bawah Sidebar)
+    # 2. COPYRIGHT DI SIDEBAR (Sesuai Request)
     st.markdown("---")
     st.markdown(
         """
-        <div style='text-align: center; color: grey; font-size: 12px;'>
-        Copyright By<br>
-        <b>Milda Nabilah Al-hamaz</b><br>
-        202210715059
+        <div style='text-align: center; color: #666; font-size: 13px; margin-top: 20px;'>
+        <p>Copyright By <br>
+        <strong>Milda Nabilah Al-hamaz</strong> <br>
+        202210715059</p>
         </div>
         """, 
         unsafe_allow_html=True
@@ -155,7 +160,7 @@ with st.sidebar:
 
 # --- HALAMAN 1: DASHBOARD DATA ---
 if page == "📊 Dashboard Data":
-    st.title("📊 Dashboard Data Perceraian Jawa Barat")
+    st.title("📊 Dashboard Data Perceraian")
     st.markdown("Eksplorasi tren dan faktor penyebab perceraian.")
 
     # Filter Data
@@ -186,17 +191,17 @@ if page == "📊 Dashboard Data":
         st.plotly_chart(fig_trend, use_container_width=True)
 
     with col_chart2:
-        st.subheader(f"⚠️ Faktor Dominan ({selected_year_sidebar})")
-        # Mengambil data faktor (namanya sudah bersih/pendek dari load_dataset)
+        # LABEL FAKTOR SUDAH BERSIH KARENA FUNGSI load_dataset DI ATAS
+        st.subheader(f"⚠️ Top Penyebab ({selected_year_sidebar})")
         df_factors = df_filtered[df_filtered[YEAR_COL] == selected_year_sidebar][factor_cols].sum().reset_index()
         df_factors.columns = ["Faktor", "Jumlah"]
         df_factors = df_factors.sort_values("Jumlah", ascending=True).tail(10)
         
         fig_factors = px.bar(df_factors, x="Jumlah", y="Faktor", orientation='h',
-                             title="Top 10 Penyebab",
+                             title="10 Faktor Dominan",
                              text_auto='.2s',
                              color="Jumlah", color_continuous_scale="Reds")
-        fig_factors.update_layout(yaxis_title=None) # Hilangkan label sumbu Y agar bersih
+        fig_factors.update_layout(yaxis_title=None) 
         st.plotly_chart(fig_factors, use_container_width=True)
 
 
@@ -223,16 +228,16 @@ elif page == "🔮 Prediksi & Perbandingan":
 
     # 2. INPUT FAKTOR (DROPDOWN / EXPANDER)
     st.markdown("### 2. Input Faktor Penyebab")
-    # Menggunakan Expander yang bertindak sebagai "Dropdown Menu" untuk input detail
-    with st.expander("👇 Klik di sini untuk membuka/mengubah Angka Faktor", expanded=False):
-        st.caption("Ubah angka di bawah untuk mensimulasikan kondisi (Misal: Ekonomi naik).")
+    
+    # 3. FITUR DROPDOWN (EXPANDER) UNTUK MENYEDERHANAKAN TAMPILAN
+    with st.expander("👇 Klik untuk mengubah Angka Faktor (Ekonomi, Judi, dll)", expanded=False):
+        st.caption("Ubah angka di bawah jika ingin simulasi manual.")
         
         input_data = {}
-        # Layout Grid agar rapi
         cols = st.columns(3) 
         for i, col_name in enumerate(factor_cols):
             with cols[i % 3]:
-                # Label sudah bersih (pendek)
+                # Label 'col_name' di sini sudah bersih (misal: "Mabuk", "Ekonomi")
                 val = st.number_input(
                     f"{col_name}", 
                     min_value=0, 
@@ -325,7 +330,7 @@ elif page == "📈 Evaluasi Model":
         metrics_df = pd.DataFrame(metrics_data).set_index("Model")
 
         st.subheader(f"📊 Metrik Error (Data Tahun {test_year})")
-        st.table(metrics_df.round(2)) # Round agar rapi dan tidak error
+        st.table(metrics_df.round(2)) 
 
         # Scatter Plot
         st.subheader("🎯 Aktual vs Prediksi")
