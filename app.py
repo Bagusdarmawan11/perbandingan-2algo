@@ -300,28 +300,36 @@ with tab1:
     fig_region.update_layout(yaxis=dict(categoryorder="total ascending"), height=600, showlegend=False)
     st.plotly_chart(fig_region, use_container_width=True)
 
-    # --- 2. Treemap Faktor ---
-    st.markdown("##### 🧩 Proporsi Faktor Penyebab")
+    # --- 2. Grafik Faktor (Bar Chart Horizontal) ---
+    # BAGIAN INI TELAH DIUBAH DARI TREEMAP MENJADI BAR CHART SESUAI PERMINTAAN
+    st.markdown("##### 🧩 Proporsi Faktor Penyebab Utama")
     
-    # Validasi kolom agar melt tidak error
-    valid_cols = [c for c in factor_cols if c in df_year.columns]
+    valid_factors = [c for c in factor_cols if c in df_year.columns]
     
-    if valid_cols:
-        # PENTING: value_name="Total_Kasus" agar tidak bentrok dengan kolom "Jumlah" asli
-        melted = df_year.melt(id_vars=[REGION_COL], value_vars=valid_cols, 
-                              var_name="Faktor", value_name="Total_Kasus")
-        
-        # Filter 0 agar grafik bersih
-        melted = melted[melted["Total_Kasus"] > 0]
-        
-        fig_tree = px.treemap(
-            melted, 
-            path=[REGION_COL, "Faktor"], 
-            values="Total_Kasus", 
-            color=REGION_COL,
-            title=f"Komposisi Penyebab Perceraian ({selected_year})"
+    if valid_factors:
+        # Hitung total per faktor di tahun tersebut
+        factor_sum = df_year[valid_factors].sum().sort_values(ascending=True)
+        # Ubah ke dataframe untuk plotting
+        factor_df = factor_sum.reset_index()
+        factor_df.columns = ["Faktor", "Total Kasus"]
+
+        # Buat Bar Chart Horizontal
+        fig_factor = px.bar(
+            factor_df,
+            x="Total Kasus",
+            y="Faktor",
+            orientation="h",
+            text_auto='.2s', # Format angka singkat (misal 1.2k)
+            template="plotly_white",
+            color="Total Kasus", # Warna gradasi berdasarkan jumlah
+            color_continuous_scale="Reds",
+            title=f"Total Kasus per Faktor Penyebab ({selected_year})"
         )
-        st.plotly_chart(fig_tree, use_container_width=True)
+        # Urutkan agar yang terbesar di atas
+        fig_factor.update_layout(yaxis=dict(categoryorder="total ascending"), height=600)
+        st.plotly_chart(fig_factor, use_container_width=True)
+    else:
+        st.warning("Data faktor tidak ditemukan untuk tahun ini.")
     
     # --- INSIGHT ---
     top_region = df_year_sorted.iloc[-1][REGION_COL]
@@ -334,8 +342,7 @@ with tab1:
             <p>Berdasarkan data tahun <b>{selected_year}</b>, wilayah <b>{top_region}</b> mencatatkan angka perceraian tertinggi 
             di Jawa Barat dengan total <b>{top_val:,.0f}</b> kasus. Grafik batang di atas memvisualisasikan disparitas 
             kasus antar wilayah secara jelas.</p>
-            <p>Pada grafik Treemap, Anda dapat melihat dominasi faktor penyebab di setiap kota. Kotak yang lebih besar 
-            menandakan kontribusi faktor yang lebih signifikan terhadap total kasus.</p>
+            <p>Pada grafik kedua (Bar Chart), Anda dapat melihat faktor apa yang paling dominan menyebabkan perceraian di tahun tersebut secara keseluruhan di Jawa Barat.</p>
         </div>
     </div>""", unsafe_allow_html=True)
 
@@ -411,7 +418,7 @@ with tab3:
     st.subheader("🔮 Simulasi & Prediksi (MLP vs RF)")
     st.info("Pilih wilayah, tahun masa depan, dan faktor penyebab. Faktor yang dipilih akan otomatis diisi nilai **Median**, sisanya **0**.")
 
-    with st.form("prediction_form"):
+    with st.form("pred_form"):
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**1. Parameter Wilayah**")
