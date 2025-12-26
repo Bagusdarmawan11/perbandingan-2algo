@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from tensorflow.keras.models import load_model
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+# Pastikan r2_score diimport
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # ==========================================
@@ -33,7 +34,7 @@ st.markdown("""
             background-color: #f8f9fa;
         }
 
-        /* Styling Tabs */
+        /* Styling Tabs agar lebih terlihat */
         .stTabs [data-baseweb="tab-list"] { gap: 8px; }
         .stTabs [data-baseweb="tab"] {
             height: 50px; 
@@ -60,7 +61,7 @@ st.markdown("""
 
         /* Insight Box Style (Dark Theme Inspired) */
         .insight-box {
-            background-color: #111827; /* Dark background */
+            background-color: #1E293B; /* Dark background */
             border-left: 5px solid #3B82F6; /* Blue accent */
             padding: 20px;
             border-radius: 8px;
@@ -168,7 +169,7 @@ def load_and_clean_data():
                        .replace("-", "") \
                        .strip()
             
-            # Jika masih ada sisa spasi di awal/akhir
+            # Jika masih ada sisa spasi
             new_cols.append(clean.strip())
             
     # Deduplikasi
@@ -183,7 +184,7 @@ def load_and_clean_data():
             final_cols.append(c)
             
     df.columns = final_cols
-    # Title case untuk region agar cocok dengan GeoJSON
+    # Title case agar cocok dengan GeoJSON
     df[REGION_COL] = df[REGION_COL].str.strip()
     return df
 
@@ -235,7 +236,7 @@ regions = sorted(df[REGION_COL].unique())
 # 4. HEADER & SIDEBAR
 # ==========================================
 st.title("📊 Sistem Analisis & Prediksi Perceraian Jawa Barat")
-st.caption("Platform komprehensif untuk memantau tren, mengeksplorasi penyebab, dan memprediksi angka perceraian menggunakan **Dual-Model AI**.")
+st.caption("Platform komprehensif untuk memantau tren dan memprediksi angka perceraian menggunakan **Dual-Model AI (MLP & RF)**.")
 
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2921/2921226.png", width=50)
@@ -306,7 +307,7 @@ with tab1:
     valid_cols = [c for c in factor_cols if c in df_year.columns]
     
     if valid_cols:
-        # PENTING: value_name="Total_Kasus" agar tidak bentrok dengan kolom "Jumlah" di dataframe
+        # PENTING: value_name="Total_Kasus" agar tidak bentrok dengan kolom "Jumlah" asli
         melted = df_year.melt(id_vars=[REGION_COL], value_vars=valid_cols, 
                               var_name="Faktor", value_name="Total_Kasus")
         
@@ -322,7 +323,7 @@ with tab1:
         )
         st.plotly_chart(fig_tree, use_container_width=True)
     
-    # --- INSIGHT KAYA ---
+    # --- INSIGHT ---
     top_region = df_year_sorted.iloc[-1][REGION_COL]
     top_val = df_year_sorted.iloc[-1][TARGET_COL]
     
@@ -355,7 +356,7 @@ with tab2:
                 df_map,
                 geojson=geojson,
                 locations=REGION_COL,
-                # Pastikan ini sesuai dengan properti di GeoJSON (biasanya NAME_2 atau KAB_KOTA)
+                # Key GeoJSON
                 featureidkey="properties.NAME_2", 
                 color=TARGET_COL,
                 color_continuous_scale="Reds",
@@ -388,9 +389,9 @@ with tab2:
         fig_map.update_layout(height=600, margin={"r":0,"t":40,"l":0,"b":0})
         st.plotly_chart(fig_map, use_container_width=True)
         if not geojson:
-            st.caption("ℹ️ Menampilkan peta titik koordinat (File GeoJSON tidak ditemukan).")
+            st.caption("ℹ️ Menampilkan peta titik koordinat (File GeoJSON tidak ditemukan/cocok).")
 
-    # --- INSIGHT KAYA ---
+    # --- INSIGHT ---
     st.markdown(f"""
     <div class='insight-box'>
         <div class='insight-title'>💡 Interpretasi Spasial</div>
@@ -410,7 +411,7 @@ with tab3:
     st.subheader("🔮 Simulasi & Prediksi (MLP vs RF)")
     st.info("Pilih wilayah, tahun masa depan, dan faktor penyebab. Faktor yang dipilih akan otomatis diisi nilai **Median**, sisanya **0**.")
 
-    with st.form("pred_form"):
+    with st.form("prediction_form"):
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**1. Parameter Wilayah**")
@@ -422,6 +423,13 @@ with tab3:
             st.caption("Pilih faktor yang diasumsikan terjadi:")
             # Faktor bersih (tanpa kata Nilai/Faktor di label)
             factor_inputs = st.multiselect("Faktor:", options=factor_cols)
+            
+            # (Optional) Input nilai manual untuk faktor terpilih
+            inputs = {}
+            if factor_inputs:
+                for f in factor_inputs:
+                    # Label input hanya nama faktor
+                    inputs[f] = st.number_input(f"{f}:", min_value=0, value=0)
 
         submit_pred = st.form_submit_button("🚀 Jalankan Prediksi")
 
@@ -435,63 +443,73 @@ with tab3:
             for r in regions_input:
                 for y in years_input:
                     row = {REGION_COL: r, YEAR_COL: y}
-                    # Isi faktor: Median jika dipilih, 0 jika tidak
+                    # Isi faktor: Input User (jika ada) atau 0
                     for f in factor_cols:
-                        row[f] = df[f].median() if f in factor_inputs else 0.0
+                        if f in inputs:
+                            row[f] = inputs[f]
+                        else:
+                            row[f] = 0.0
                     rows.append(row)
 
-            # DataFrame Input & Predict
+            # DataFrame Input
             input_df = pd.DataFrame(rows)
-            X_pred = preprocessor.transform(input_df[feature_cols])
-            
-            y_mlp = mlp_model.predict(X_pred).flatten()
-            y_rf = rf_model.predict(X_pred)
-            
-            # Format Output
-            res_df = input_df[[REGION_COL, YEAR_COL]].copy()
-            res_df["Prediksi MLP"] = y_mlp
-            res_df["Prediksi RF"] = y_rf
-            res_df["Selisih"] = abs(y_mlp - y_rf)
-            
-            # Format tampilan angka
-            disp_df = res_df.copy()
-            for c in ["Prediksi MLP", "Prediksi RF", "Selisih"]:
-                disp_df[c] = disp_df[c].apply(lambda x: f"{x:,.0f}")
-            
-            st.success("Prediksi berhasil dihitung!")
-            st.dataframe(disp_df, use_container_width=True)
-            
-            # Visualisasi Compare Total
-            melted_res = res_df.melt(id_vars=[REGION_COL, YEAR_COL], 
-                                     value_vars=["Prediksi MLP", "Prediksi RF"],
-                                     var_name="Model", value_name="Nilai")
-            melted_res["Nilai"] = melted_res["Nilai"].str.replace(",", "").astype(float)
-            
-            fig_comp = px.bar(melted_res, x="Nilai", y=REGION_COL, color="Model", barmode="group",
-                              title="Perbandingan Hasil Prediksi Model", orientation='h',
-                              color_discrete_map={"Prediksi MLP": COLOR_MLP, "Prediksi RF": COLOR_RF})
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # --- INSIGHT KAYA ---
-            diff_avg = res_df["Selisih"].mean()
-            higher_model = "MLP" if y_mlp.mean() > y_rf.mean() else "Random Forest"
-            
-            st.markdown(f"""
-            <div class='insight-box'>
-                <div class='insight-title'>💡 Analisis Hasil Prediksi</div>
-                <div class='insight-content'>
-                    <p>Simulasi menunjukkan bahwa model <b>{higher_model}</b> cenderung memberikan estimasi angka yang lebih tinggi 
-                    dibandingkan model lainnya.</p>
-                    <p>Rata-rata selisih prediksi antara kedua algoritma adalah <b>{diff_avg:,.0f}</b> kasus. 
-                    Perbedaan ini wajar terjadi karena karakteristik matematis yang berbeda:</p>
-                    <ul>
-                        <li><b>MLP (Neural Network):</b> Belajar pola global yang kompleks dan non-linear.</li>
-                        <li><b>Random Forest:</b> Menggunakan <i>ensemble trees</i> yang lebih stabil terhadap data tabular.</li>
-                    </ul>
-                    <p><b>Rekomendasi Strategis:</b> Untuk keperluan perencanaan anggaran atau sumber daya penanganan, disarankan menggunakan 
-                    angka prediksi tertinggi sebagai langkah antisipatif (konservatif).</p>
-                </div>
-            </div>""", unsafe_allow_html=True)
+            # Pastikan urutan kolom sesuai training
+            input_df_final = input_df[feature_cols]
+
+            try:
+                # Preprocessing
+                X_pred = preprocessor.transform(input_df_final)
+                
+                # Prediksi
+                y_mlp = mlp_model.predict(X_pred).flatten()
+                y_rf = rf_model.predict(X_pred)
+                
+                # Format Output (Display Dataframe)
+                res_display = input_df[[REGION_COL, YEAR_COL]].copy()
+                res_display["Prediksi MLP"] = [f"{val:,.0f}" for val in y_mlp]
+                res_display["Prediksi RF"] = [f"{val:,.0f}" for val in y_rf]
+                res_display["Selisih"] = [f"{abs(m - r):,.0f}" for m, r in zip(y_mlp, y_rf)]
+                
+                st.success("✅ Prediksi Selesai!")
+                st.dataframe(res_display, use_container_width=True)
+                
+                # Visualisasi (Gunakan Data Asli Angka agar tidak error AttributeError)
+                res_plot = input_df[[REGION_COL, YEAR_COL]].copy()
+                res_plot["Prediksi MLP"] = y_mlp
+                res_plot["Prediksi RF"] = y_rf
+                
+                melted_res = res_plot.melt(id_vars=[REGION_COL, YEAR_COL], 
+                                           value_vars=["Prediksi MLP", "Prediksi RF"],
+                                           var_name="Model", value_name="Nilai")
+                
+                fig_comp = px.bar(melted_res, x="Nilai", y=REGION_COL, color="Model", barmode="group",
+                                  title="Perbandingan Hasil Prediksi Model", orientation='h',
+                                  color_discrete_map={"Prediksi MLP": COLOR_MLP, "Prediksi RF": COLOR_RF})
+                st.plotly_chart(fig_comp, use_container_width=True)
+                
+                # --- INSIGHT ---
+                diff_avg = np.mean(np.abs(y_mlp - y_rf))
+                higher_model = "MLP" if np.mean(y_mlp) > np.mean(y_rf) else "Random Forest"
+                
+                st.markdown(f"""
+                <div class='insight-box'>
+                    <div class='insight-title'>💡 Analisis Hasil Prediksi</div>
+                    <div class='insight-content'>
+                        <p>Simulasi menunjukkan bahwa model <b>{higher_model}</b> cenderung memberikan estimasi angka yang lebih tinggi 
+                        dibandingkan model lainnya.</p>
+                        <p>Rata-rata selisih prediksi antara kedua algoritma adalah <b>{diff_avg:,.0f}</b> kasus. 
+                        Perbedaan ini wajar terjadi karena karakteristik matematis yang berbeda:</p>
+                        <ul>
+                            <li><b>MLP (Neural Network):</b> Belajar pola global yang kompleks dan non-linear.</li>
+                            <li><b>Random Forest:</b> Menggunakan <i>ensemble trees</i> yang lebih stabil terhadap data tabular.</li>
+                        </ul>
+                        <p><b>Rekomendasi Strategis:</b> Untuk keperluan perencanaan anggaran atau sumber daya penanganan, disarankan menggunakan 
+                        angka prediksi tertinggi sebagai langkah antisipatif (konservatif).</p>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"Error prediksi: {e}")
 
 
 # ==========================================
@@ -529,10 +547,11 @@ with tab5:
         p_rf = rf_model.predict(X_t)
         
         mae_mlp = mean_absolute_error(y_true, p_mlp)
-        mae_rf = mean_absolute_error(y_true, p_rf)
         rmse_mlp = np.sqrt(mean_squared_error(y_true, p_mlp))
-        rmse_rf = np.sqrt(mean_squared_error(y_true, p_rf))
         r2_mlp = r2_score(y_true, p_mlp)
+        
+        mae_rf = mean_absolute_error(y_true, p_rf)
+        rmse_rf = np.sqrt(mean_squared_error(y_true, p_rf))
         r2_rf = r2_score(y_true, p_rf)
 
         # Kartu Metrik
@@ -565,22 +584,22 @@ with tab5:
         fig_sc.update_layout(title="Akurasi: Aktual vs Prediksi", xaxis_title="Jumlah Aktual", yaxis_title="Jumlah Prediksi")
         st.plotly_chart(fig_sc, use_container_width=True)
         
-        # --- INSIGHT KAYA (FIXED INDENTATION) ---
+        # --- INSIGHT KAYA ---
         improvement = abs(mae_mlp - mae_rf)
         
-        # Menggunakan string biasa tanpa indentasi di dalam tag HTML untuk mencegah render sebagai code block
+        # Penulisan HTML tanpa indentasi agar dirender benar oleh Streamlit
         insight_html = f"""
 <div class='insight-box'>
-    <div class='insight-title'>💡 Kesimpulan Evaluasi Menyeluruh</div>
-    <div class='insight-content'>
-        <p>Berdasarkan pengujian data tahun terakhir (<b>{test_yr}</b>), model <b>{best_model_name}</b> menunjukkan performa yang lebih unggul.</p>
-        <p><b>Temuan Penting:</b></p>
-        <ul>
-            <li><b>Akurasi:</b> Model {best_model_name} memiliki error <b>{improvement:.2f}</b> poin lebih kecil.</li>
-            <li><b>Konsistensi:</b> Sebaran prediksi model ini lebih mendekati garis ideal pada grafik di atas.</li>
-            <li><b>Rekomendasi:</b> Gunakan model ini untuk prediksi kebijakan jangka pendek.</li>
-        </ul>
-    </div>
+<div class='insight-title'>💡 Kesimpulan Evaluasi Menyeluruh</div>
+<div class='insight-content'>
+<p>Berdasarkan pengujian data tahun terakhir (<b>{test_yr}</b>), model <b>{best_model_name}</b> menunjukkan performa yang lebih unggul.</p>
+<p><b>Temuan Penting:</b></p>
+<ul>
+<li><b>Akurasi:</b> Model {best_model_name} memiliki error <b>{improvement:.2f}</b> poin lebih kecil.</li>
+<li><b>Konsistensi:</b> Sebaran prediksi model ini lebih mendekati garis ideal pada grafik di atas.</li>
+<li><b>Rekomendasi:</b> Gunakan model ini untuk prediksi kebijakan jangka pendek.</li>
+</ul>
+</div>
 </div>
 """
         st.markdown(insight_html, unsafe_allow_html=True)
