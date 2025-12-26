@@ -28,11 +28,13 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
-        /* Styling Tabs agar lebih terlihat */
-        .stTabs [data-baseweb="tab-list"] { 
-            gap: 8px; 
-            margin-top: 10px;
+        /* Styling Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
         }
+
+        /* Styling Tabs */
+        .stTabs [data-baseweb="tab-list"] { gap: 8px; }
         .stTabs [data-baseweb="tab"] {
             height: 50px; 
             white-space: pre-wrap; 
@@ -40,13 +42,11 @@ st.markdown("""
             border-radius: 5px 5px 0 0;
             border: 1px solid #ddd;
             border-bottom: none;
-            padding: 10px 20px;
         }
         .stTabs [aria-selected="true"] { 
             background-color: #ffffff; 
             border-top: 3px solid #E63946;
             font-weight: bold;
-            color: #E63946;
         }
         
         /* Metric Box Styling */
@@ -58,27 +58,33 @@ st.markdown("""
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
 
-        /* Insight Box Fixed */
+        /* Insight Box Style (Dark Theme Inspired) */
         .insight-box {
-            background-color: #f0f7fb;
-            border-left: 5px solid #457B9D;
+            background-color: #111827; /* Dark background */
+            border-left: 5px solid #3B82F6; /* Blue accent */
             padding: 20px;
-            border-radius: 5px;
+            border-radius: 8px;
             margin-top: 20px;
             margin-bottom: 20px;
-            color: #1d3557;
-            font-family: 'Source Sans Pro', sans-serif;
+            color: #F3F4F6; /* Light text */
+            font-family: sans-serif;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .insight-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-            color: #1d3557;
-            display: block;
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #60A5FA; /* Lighter blue title */
         }
         .insight-content {
-            font-size: 1rem;
+            font-size: 0.95em;
             line-height: 1.6;
+            opacity: 0.95;
+        }
+        .insight-content strong {
+            color: #FCA5A5; /* Reddish bold text */
         }
         
         /* Sidebar Copyright */
@@ -149,7 +155,7 @@ def load_and_clean_data():
         if col in [TARGET_COL, YEAR_COL, REGION_COL]:
             new_cols.append(col)
         else:
-            # Hapus variasi kata panjang & Typo
+            # Hapus variasi kata panjang
             clean = col.replace("Faktor Penyebab Perceraian", "") \
                        .replace("Faktor Perceraian", "") \
                        .replace("Fakor Perceraian", "") \
@@ -162,13 +168,10 @@ def load_and_clean_data():
                        .replace("-", "") \
                        .strip()
             
-            # Jika masih ada sisa " - "
-            if " - " in clean:
-                clean = clean.split(" - ")[-1]
-            
+            # Jika masih ada sisa spasi di awal/akhir
             new_cols.append(clean.strip())
             
-    # Deduplikasi nama kolom (Fix ValueError: Melt)
+    # Deduplikasi
     final_cols = []
     seen = {}
     for c in new_cols:
@@ -180,7 +183,7 @@ def load_and_clean_data():
             final_cols.append(c)
             
     df.columns = final_cols
-    # Tidak di-upper case agar match dengan GeoJSON (Title Case)
+    # Title case untuk region agar cocok dengan GeoJSON
     df[REGION_COL] = df[REGION_COL].str.strip()
     return df
 
@@ -229,30 +232,25 @@ years = sorted(df[YEAR_COL].unique())
 regions = sorted(df[REGION_COL].unique())
 
 # ==========================================
-# 4. HEADER & SIDEBAR (FILTER ONLY)
+# 4. HEADER & SIDEBAR
 # ==========================================
-st.title("📊 Prediksi Perceraian Provinsi Jawa Barat")
-st.caption("Platform analisis tren dan prediksi menggunakan **Multi-Layer Perceptron (MLP)** dan **Random Forest**.")
+st.title("📊 Sistem Analisis & Prediksi Perceraian Jawa Barat")
+st.caption("Platform komprehensif untuk memantau tren, mengeksplorasi penyebab, dan memprediksi angka perceraian menggunakan **Dual-Model AI**.")
 
-# SIDEBAR: HANYA FILTER & COPYRIGHT (MENU DIHAPUS)
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2921/2921226.png", width=50)
-    st.header("🎛️ Filter Global")
+    st.title("🎛️ Filter Global")
     
-    # Filter Global Tahun (Mempengaruhi Dashboard, Eksplorasi, Peta)
     selected_year = st.selectbox(
         "Pilih Tahun Analisis:",
         options=years,
-        index=len(years) - 1
-    )
-    
-    # Filter Global Wilayah (Mempengaruhi Dashboard & Tabel)
-    selected_region = st.selectbox(
-        "Pilih Wilayah (Opsional):",
-        options=["(Semua)"] + regions
+        index=len(years) - 1,
+        help="Filter ini akan mengubah data di Tab Eksplorasi dan Peta."
     )
     
     st.markdown("---")
+    st.info("💡 **Tips:** Gunakan tombol 'Refresh Cache' jika data atau tampilan terasa tidak update.")
+    
     if st.button("🔄 Refresh / Clear Cache"):
         st.cache_data.clear()
         st.rerun()
@@ -270,132 +268,109 @@ with st.sidebar:
     )
 
 # ==========================================
-# 5. TABS NAVIGASI UTAMA (MENU DI ATAS)
+# 5. TABS NAVIGASI UTAMA
 # ==========================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Dashboard", 
-    "📈 Eksplorasi", 
-    "🗺️ Peta Sebaran", 
-    "🔮 Prediksi AI", 
+    "📈 Eksplorasi Daerah & Faktor",
+    "🗺️ Peta Jawa Barat",
+    "🔮 Prediksi (MLP vs RF)",
+    "📑 Tabel Data",
     "📉 Evaluasi Model"
 ])
 
 # ==========================================
-# TAB 1: DASHBOARD
+# TAB 1: EKSPLORASI DAERAH & FAKTOR
 # ==========================================
 with tab1:
-    st.subheader(f"Ringkasan Data Tahun {selected_year}")
-    
-    df_dash = df.copy()
-    if selected_region != "(Semua)":
-        df_dash = df_dash[df_dash[REGION_COL] == selected_region]
-    
-    # Metrik
-    total = df_dash[df_dash[YEAR_COL] == selected_year][TARGET_COL].sum()
-    avg = df_dash[df_dash[YEAR_COL] == selected_year][TARGET_COL].mean()
-    mx = df_dash[df_dash[YEAR_COL] == selected_year][TARGET_COL].max()
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Kasus", f"{total:,.0f}")
-    c2.metric("Rata-rata Kasus", f"{avg:,.0f}")
-    c3.metric("Kasus Tertinggi (Wilayah)", f"{mx:,.0f}")
-    
-    st.markdown("---")
-    
-    col_g1, col_g2 = st.columns(2)
-    
-    with col_g1:
-        st.markdown("##### 📈 Tren Tahunan")
-        trend = df_dash.groupby(YEAR_COL)[TARGET_COL].sum().reset_index()
-        fig_trend = px.line(trend, x=YEAR_COL, y=TARGET_COL, markers=True, color_discrete_sequence=[COLOR_ACTUAL])
-        st.plotly_chart(fig_trend, use_container_width=True)
-        
-    with col_g2:
-        st.markdown(f"##### 🧩 Top 5 Faktor Penyebab ({selected_year})")
-        # Hitung faktor
-        f_sum = df_dash[df_dash[YEAR_COL] == selected_year][factor_cols].sum().reset_index()
-        f_sum.columns = ["Faktor", "Jumlah"]
-        f_sum = f_sum.sort_values("Jumlah", ascending=True).tail(10)
-        
-        fig_bar = px.bar(f_sum, x="Jumlah", y="Faktor", orientation='h', color="Jumlah", color_continuous_scale="Reds")
-        fig_bar.update_layout(showlegend=False)
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-# ==========================================
-# TAB 2: EKSPLORASI (HORIZONTAL BAR)
-# ==========================================
-with tab2:
-    st.subheader(f"Analisis Detail Tahun {selected_year}")
+    st.subheader(f"📈 Eksplorasi Data Tahun {selected_year}")
     df_year = df[df[YEAR_COL] == selected_year].copy()
 
-    # 1. Grafik Daerah (Horizontal)
-    st.markdown("#### 🔥 Peringkat Wilayah (Kasus Tertinggi)")
+    # --- 1. Grafik Daerah (Horizontal) ---
+    st.markdown("##### 🏙️ Sebaran Kasus per Wilayah")
     df_year_sorted = df_year.sort_values(TARGET_COL, ascending=True)
 
     fig_region = px.bar(
         df_year_sorted,
         x=TARGET_COL, y=REGION_COL, orientation="h",
+        labels={REGION_COL: "Wilayah", TARGET_COL: "Total Kasus"},
         text_auto='.2s', template="plotly_white",
-        labels={REGION_COL: "", TARGET_COL: "Total Kasus"},
-        color=REGION_COL
+        color=REGION_COL # Warna beda tiap daerah
     )
-    fig_region.update_layout(yaxis=dict(categoryorder="total ascending"), height=700, showlegend=False)
+    fig_region.update_layout(yaxis=dict(categoryorder="total ascending"), height=600, showlegend=False)
     st.plotly_chart(fig_region, use_container_width=True)
 
-    # 2. Grafik Faktor (Horizontal)
-    st.markdown("#### 🧩 Kontribusi Faktor Penyebab")
+    # --- 2. Treemap Faktor ---
+    st.markdown("##### 🧩 Proporsi Faktor Penyebab")
     
-    valid_factors = [c for c in factor_cols if c in df_year.columns]
+    # Validasi kolom agar melt tidak error
+    valid_cols = [c for c in factor_cols if c in df_year.columns]
     
-    if valid_factors:
-        factor_sum = df_year[valid_factors].sum().sort_values(ascending=True)
-        factor_df = factor_sum.reset_index()
-        factor_df.columns = ["Faktor", "Nilai"]
-
-        fig_factor = px.bar(
-            factor_df,
-            x="Nilai", y="Faktor", orientation="h",
-            text_auto='.2s', template="plotly_white", 
-            color="Nilai", color_continuous_scale="Blues",
-            labels={"Nilai": "Jumlah Kasus", "Faktor": ""}
+    if valid_cols:
+        # PENTING: value_name="Total_Kasus" agar tidak bentrok dengan kolom "Jumlah" di dataframe
+        melted = df_year.melt(id_vars=[REGION_COL], value_vars=valid_cols, 
+                              var_name="Faktor", value_name="Total_Kasus")
+        
+        # Filter 0 agar grafik bersih
+        melted = melted[melted["Total_Kasus"] > 0]
+        
+        fig_tree = px.treemap(
+            melted, 
+            path=[REGION_COL, "Faktor"], 
+            values="Total_Kasus", 
+            color=REGION_COL,
+            title=f"Komposisi Penyebab Perceraian ({selected_year})"
         )
-        fig_factor.update_layout(yaxis=dict(categoryorder="total ascending"), height=600)
-        st.plotly_chart(fig_factor, use_container_width=True)
+        st.plotly_chart(fig_tree, use_container_width=True)
     
-    # Insight
-    top_reg = df_year_sorted.iloc[-1][REGION_COL]
+    # --- INSIGHT KAYA ---
+    top_region = df_year_sorted.iloc[-1][REGION_COL]
     top_val = df_year_sorted.iloc[-1][TARGET_COL]
-    st.info(f"💡 **Insight:** Wilayah dengan kasus tertinggi pada tahun {selected_year} adalah **{top_reg}** ({top_val:,.0f} kasus).")
+    
+    st.markdown(f"""
+    <div class='insight-box'>
+        <div class='insight-title'>💡 Analisis Eksploratif</div>
+        <div class='insight-content'>
+            <p>Berdasarkan data tahun <b>{selected_year}</b>, wilayah <b>{top_region}</b> mencatatkan angka perceraian tertinggi 
+            di Jawa Barat dengan total <b>{top_val:,.0f}</b> kasus. Grafik batang di atas memvisualisasikan disparitas 
+            kasus antar wilayah secara jelas.</p>
+            <p>Pada grafik Treemap, Anda dapat melihat dominasi faktor penyebab di setiap kota. Kotak yang lebih besar 
+            menandakan kontribusi faktor yang lebih signifikan terhadap total kasus.</p>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
 
 # ==========================================
-# TAB 3: PETA JAWA BARAT
+# TAB 2: PETA JAWA BARAT
 # ==========================================
-with tab3:
-    st.subheader(f"Peta Sebaran Kasus ({selected_year})")
+with tab2:
+    st.subheader(f"🗺️ Geografis Sebaran Kasus ({selected_year})")
     df_map = df[df[YEAR_COL] == selected_year].copy()
     geojson = load_geojson()
 
+    # Prioritas 1: Peta Wilayah (Choropleth)
+    map_success = False
     if geojson:
         try:
             fig_map = px.choropleth(
                 df_map,
                 geojson=geojson,
                 locations=REGION_COL,
-                featureidkey="properties.NAME_2", # Sesuaikan dengan GeoJSON
+                # Pastikan ini sesuai dengan properti di GeoJSON (biasanya NAME_2 atau KAB_KOTA)
+                featureidkey="properties.NAME_2", 
                 color=TARGET_COL,
                 color_continuous_scale="Reds",
                 hover_name=REGION_COL,
-                title=f"Intensitas Kasus Perceraian di Jawa Barat"
+                title=f"Peta Intensitas Perceraian ({selected_year})"
             )
             fig_map.update_geos(fitbounds="locations", visible=False)
-            fig_map.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
+            fig_map.update_layout(height=600, margin={"r":0,"t":40,"l":0,"b":0})
             st.plotly_chart(fig_map, use_container_width=True)
+            map_success = True
         except Exception:
-            st.warning("Gagal memuat peta wilayah. Menampilkan peta titik.")
-            geojson = None
+            pass # Fallback silent
 
-    if not geojson:
+    # Prioritas 2: Peta Titik (Scatter Mapbox) jika Choropleth gagal
+    if not map_success:
         lats, lons = [], []
         for reg in df_map[REGION_COL]:
             coords = JABAR_COORDS.get(reg.upper(), [-6.9, 107.6])
@@ -407,45 +382,52 @@ with tab3:
         
         fig_map = px.scatter_mapbox(
             df_map, lat="lat", lon="lon", size=TARGET_COL, color=TARGET_COL,
-            hover_name=REGION_COL, color_continuous_scale="Reds", size_max=45, zoom=7.5,
-            mapbox_style="carto-positron"
+            hover_name=REGION_COL, color_continuous_scale="Reds", size_max=45, zoom=7.2,
+            mapbox_style="carto-positron", title=f"Peta Titik Panas ({selected_year})"
         )
-        fig_map.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
+        fig_map.update_layout(height=600, margin={"r":0,"t":40,"l":0,"b":0})
         st.plotly_chart(fig_map, use_container_width=True)
+        if not geojson:
+            st.caption("ℹ️ Menampilkan peta titik koordinat (File GeoJSON tidak ditemukan).")
+
+    # --- INSIGHT KAYA ---
+    st.markdown(f"""
+    <div class='insight-box'>
+        <div class='insight-title'>💡 Interpretasi Spasial</div>
+        <div class='insight-content'>
+            <p>Peta ini menggambarkan konsentrasi kasus perceraian secara geografis. 
+            Wilayah dengan warna <b>merah pekat</b> (atau lingkaran besar) menunjukkan zona dengan tingkat perceraian yang kritis.</p>
+            <p>Informasi ini penting bagi pembuat kebijakan untuk memprioritaskan alokasi sumber daya penyuluhan dan intervensi sosial 
+            ke wilayah-wilayah yang paling terdampak.</p>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
 
 # ==========================================
-# TAB 4: PREDIKSI (MULTISELECT)
+# TAB 3: PREDIKSI (MULTISELECT)
 # ==========================================
-with tab4:
-    st.subheader("🔮 Simulasi Prediksi")
-    st.info("Pilih wilayah dan faktor penyebab. Faktor yang dipilih akan diisi nilai **Median**, sisanya **0**.")
+with tab3:
+    st.subheader("🔮 Simulasi & Prediksi (MLP vs RF)")
+    st.info("Pilih wilayah, tahun masa depan, dan faktor penyebab. Faktor yang dipilih akan otomatis diisi nilai **Median**, sisanya **0**.")
 
-    with st.form("prediction_form"):
+    with st.form("pred_form"):
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("**1. Wilayah & Waktu**")
-            regions_input = st.multiselect("Pilih Wilayah:", options=regions, default=[regions[0]])
-            years_input = st.multiselect("Pilih Tahun:", options=list(range(2020, 2031)), default=[2025])
+            st.markdown("**1. Parameter Wilayah**")
+            regions_input = st.multiselect("Pilih Kabupaten/Kota:", options=regions, default=[regions[0]])
+            years_input = st.multiselect("Pilih Tahun Prediksi:", options=list(range(2020, 2031)), default=[2025])
         
         with c2:
-            st.markdown("**2. Faktor Penyebab (Aktif)**")
-            selected_factor_labels = st.multiselect("Pilih Faktor:", options=factor_cols)
-            
-            # Input Dinamis (Optional jika ingin custom nilai, tapi default Median cukup)
-            inputs = {}
-            if selected_factor_labels:
-                st.caption("Ubah nilai jika perlu (Default: Median):")
-                for f in selected_factor_labels:
-                    default_val = float(df[f].median())
-                    inputs[f] = st.number_input(f"{f}:", min_value=0.0, value=default_val)
+            st.markdown("**2. Parameter Faktor Penyebab**")
+            st.caption("Pilih faktor yang diasumsikan terjadi:")
+            # Faktor bersih (tanpa kata Nilai/Faktor di label)
+            factor_inputs = st.multiselect("Faktor:", options=factor_cols)
 
-        st.markdown("---")
-        submit_pred = st.form_submit_button("🚀 Hitung Prediksi")
+        submit_pred = st.form_submit_button("🚀 Jalankan Prediksi")
 
     if submit_pred:
         if not regions_input or not years_input:
-            st.warning("Pilih minimal satu Wilayah dan Tahun.")
+            st.warning("Mohon lengkapi pilihan wilayah dan tahun.")
         elif not mlp_model or not rf_model:
             st.error("Model AI belum siap.")
         else:
@@ -453,44 +435,83 @@ with tab4:
             for r in regions_input:
                 for y in years_input:
                     row = {REGION_COL: r, YEAR_COL: y}
+                    # Isi faktor: Median jika dipilih, 0 jika tidak
                     for f in factor_cols:
-                        # Jika dipilih, pakai input user (atau median). Jika tidak, 0.
-                        row[f] = inputs.get(f, 0.0) if f in selected_factor_labels else 0.0
+                        row[f] = df[f].median() if f in factor_inputs else 0.0
                     rows.append(row)
 
+            # DataFrame Input & Predict
             input_df = pd.DataFrame(rows)
-            # Pastikan urutan kolom
             X_pred = preprocessor.transform(input_df[feature_cols])
             
             y_mlp = mlp_model.predict(X_pred).flatten()
             y_rf = rf_model.predict(X_pred)
             
-            # Result Table
+            # Format Output
             res_df = input_df[[REGION_COL, YEAR_COL]].copy()
             res_df["Prediksi MLP"] = y_mlp
             res_df["Prediksi RF"] = y_rf
             res_df["Selisih"] = abs(y_mlp - y_rf)
             
+            # Format tampilan angka
+            disp_df = res_df.copy()
             for c in ["Prediksi MLP", "Prediksi RF", "Selisih"]:
-                res_df[c] = res_df[c].apply(lambda x: f"{x:,.0f}")
+                disp_df[c] = disp_df[c].apply(lambda x: f"{x:,.0f}")
             
-            st.success("Prediksi Selesai!")
-            st.dataframe(res_df, use_container_width=True)
+            st.success("Prediksi berhasil dihitung!")
+            st.dataframe(disp_df, use_container_width=True)
             
-            # Visualisasi
-            melted = res_df.melt(id_vars=[REGION_COL, YEAR_COL], 
-                                 value_vars=["Prediksi MLP", "Prediksi RF"],
-                                 var_name="Model", value_name="Total")
-            melted["Total"] = melted["Total"].str.replace(",", "").astype(float)
+            # Visualisasi Compare Total
+            melted_res = res_df.melt(id_vars=[REGION_COL, YEAR_COL], 
+                                     value_vars=["Prediksi MLP", "Prediksi RF"],
+                                     var_name="Model", value_name="Nilai")
+            melted_res["Nilai"] = melted_res["Nilai"].str.replace(",", "").astype(float)
             
-            fig = px.bar(melted, x="Total", y=REGION_COL, color="Model", barmode="group",
-                         title="Perbandingan Prediksi", orientation='h',
-                         color_discrete_map={"Prediksi MLP": COLOR_MLP, "Prediksi RF": COLOR_RF})
-            st.plotly_chart(fig, use_container_width=True)
+            fig_comp = px.bar(melted_res, x="Nilai", y=REGION_COL, color="Model", barmode="group",
+                              title="Perbandingan Hasil Prediksi Model", orientation='h',
+                              color_discrete_map={"Prediksi MLP": COLOR_MLP, "Prediksi RF": COLOR_RF})
+            st.plotly_chart(fig_comp, use_container_width=True)
+            
+            # --- INSIGHT KAYA ---
+            diff_avg = res_df["Selisih"].mean()
+            higher_model = "MLP" if y_mlp.mean() > y_rf.mean() else "Random Forest"
+            
+            st.markdown(f"""
+            <div class='insight-box'>
+                <div class='insight-title'>💡 Analisis Hasil Prediksi</div>
+                <div class='insight-content'>
+                    <p>Simulasi menunjukkan bahwa model <b>{higher_model}</b> cenderung memberikan estimasi angka yang lebih tinggi 
+                    dibandingkan model lainnya.</p>
+                    <p>Rata-rata selisih prediksi antara kedua algoritma adalah <b>{diff_avg:,.0f}</b> kasus. 
+                    Perbedaan ini wajar terjadi karena karakteristik matematis yang berbeda:</p>
+                    <ul>
+                        <li><b>MLP (Neural Network):</b> Belajar pola global yang kompleks dan non-linear.</li>
+                        <li><b>Random Forest:</b> Menggunakan <i>ensemble trees</i> yang lebih stabil terhadap data tabular.</li>
+                    </ul>
+                    <p><b>Rekomendasi Strategis:</b> Untuk keperluan perencanaan anggaran atau sumber daya penanganan, disarankan menggunakan 
+                    angka prediksi tertinggi sebagai langkah antisipatif (konservatif).</p>
+                </div>
+            </div>""", unsafe_allow_html=True)
 
 
 # ==========================================
-# TAB 5: EVALUASI (FIXED HTML RENDER)
+# TAB 4: TABEL DATA
+# ==========================================
+with tab4:
+    st.subheader("📑 Eksplorasi Data Tabular")
+    c1, c2 = st.columns(2)
+    reg_f = c1.selectbox("Filter Wilayah:", ["(Semua)"] + regions)
+    yr_f = c2.selectbox("Filter Tahun:", ["(Semua)"] + [str(y) for y in years])
+    
+    df_tbl = df.copy()
+    if reg_f != "(Semua)": df_tbl = df_tbl[df_tbl[REGION_COL] == reg_f]
+    if yr_f != "(Semua)": df_tbl = df_tbl[df_tbl[YEAR_COL] == int(yr_f)]
+    
+    st.dataframe(df_tbl, use_container_width=True)
+
+
+# ==========================================
+# TAB 5: EVALUASI MODEL
 # ==========================================
 with tab5:
     st.subheader("📉 Evaluasi Performa Model")
@@ -498,7 +519,7 @@ with tab5:
     
     df_test = df[df[YEAR_COL] == test_yr].copy()
     if df_test.empty:
-        st.warning("Data testing tidak tersedia.")
+        st.warning("Data uji kosong.")
     else:
         # Hitung Metrik
         X_t = preprocessor.transform(df_test[feature_cols])
@@ -508,55 +529,58 @@ with tab5:
         p_rf = rf_model.predict(X_t)
         
         mae_mlp = mean_absolute_error(y_true, p_mlp)
-        rmse_mlp = np.sqrt(mean_squared_error(y_true, p_mlp))
-        r2_mlp = r2_score(y_true, p_mlp)
-        
         mae_rf = mean_absolute_error(y_true, p_rf)
+        rmse_mlp = np.sqrt(mean_squared_error(y_true, p_mlp))
         rmse_rf = np.sqrt(mean_squared_error(y_true, p_rf))
+        r2_mlp = r2_score(y_true, p_mlp)
         r2_rf = r2_score(y_true, p_rf)
 
-        # Kartu Utama
-        best_model = "MLP" if mae_mlp < mae_rf else "Random Forest"
-        best_mae = min(mae_mlp, mae_rf)
-        
+        # Kartu Metrik
+        best_model_name = "MLP (Neural Network)" if mae_mlp < mae_rf else "Random Forest"
+        best_mae_val = min(mae_mlp, mae_rf)
+        best_r2_val = max(r2_mlp, r2_rf)
+
         c1, c2, c3 = st.columns(3)
-        c1.metric("Model Terbaik", best_model)
-        c2.metric("Rata-rata Error (MAE)", f"{best_mae:.0f}")
-        c3.metric("Akurasi (R²)", f"{max(r2_mlp, r2_rf):.1%}")
-        
+        c1.metric("🏆 Model Terbaik", best_model_name)
+        c2.metric("Rata-rata Error (MAE)", f"{best_mae_val:.0f} Kasus")
+        c3.metric("Akurasi (R²)", f"{best_r2_val:.1%}")
+
         st.markdown("---")
-        
-        # Tabel
+
+        # Tabel Metrik
         met_df = pd.DataFrame({
-            "Model": ["MLP", "Random Forest"],
+            "Model": ["MLP (Neural Network)", "Random Forest"],
             "MAE": [mae_mlp, mae_rf],
             "RMSE": [rmse_mlp, rmse_rf],
             "R2": [r2_mlp, r2_rf]
         })
         st.table(met_df.set_index("Model").style.format("{:.2f}"))
-        
-        # Scatter
+
+        # Scatter Plot
         fig_sc = go.Figure()
-        fig_sc.add_trace(go.Scatter(x=y_true, y=p_mlp, mode='markers', name='MLP', marker=dict(color=COLOR_MLP)))
+        fig_sc.add_trace(go.Scatter(x=y_true, y=p_mlp, mode='markers', name='MLP', marker=dict(color=COLOR_MLP, opacity=0.7)))
         fig_sc.add_trace(go.Scatter(x=y_true, y=p_rf, mode='markers', name='RF', marker=dict(color=COLOR_RF, symbol='x')))
         fig_sc.add_trace(go.Scatter(x=[y_true.min(), y_true.max()], y=[y_true.min(), y_true.max()], 
-                                    mode='lines', name='Ideal', line=dict(color='gray', dash='dash')))
-        fig_sc.update_layout(title="Aktual vs Prediksi", xaxis_title="Aktual", yaxis_title="Prediksi")
+                                    mode='lines', name='Garis Ideal', line=dict(color='gray', dash='dash')))
+        fig_sc.update_layout(title="Akurasi: Aktual vs Prediksi", xaxis_title="Jumlah Aktual", yaxis_title="Jumlah Prediksi")
         st.plotly_chart(fig_sc, use_container_width=True)
         
-        # Insight Kaya (HTML Fix)
-        # String dibuat rapat ke kiri (no indentation) agar Markdown merender HTML dengan benar
+        # --- INSIGHT KAYA (FIXED INDENTATION) ---
+        improvement = abs(mae_mlp - mae_rf)
+        
+        # Menggunakan string biasa tanpa indentasi di dalam tag HTML untuk mencegah render sebagai code block
         insight_html = f"""
 <div class='insight-box'>
-<div class='insight-title'>💡 Kesimpulan Evaluasi</div>
-<div class='insight-content'>
-<p>Berdasarkan pengujian data tahun <b>{test_yr}</b>, model <b>{best_model}</b> menunjukkan akurasi yang lebih tinggi.</p>
-<ul>
-<li><b>Akurasi:</b> Memiliki error terendah (MAE: {best_mae:.2f}).</li>
-<li><b>Konsistensi:</b> Prediksi lebih mendekati garis ideal pada grafik scatter.</li>
-<li><b>Rekomendasi:</b> Gunakan model ini untuk acuan utama.</li>
-</ul>
-</div>
+    <div class='insight-title'>💡 Kesimpulan Evaluasi Menyeluruh</div>
+    <div class='insight-content'>
+        <p>Berdasarkan pengujian data tahun terakhir (<b>{test_yr}</b>), model <b>{best_model_name}</b> menunjukkan performa yang lebih unggul.</p>
+        <p><b>Temuan Penting:</b></p>
+        <ul>
+            <li><b>Akurasi:</b> Model {best_model_name} memiliki error <b>{improvement:.2f}</b> poin lebih kecil.</li>
+            <li><b>Konsistensi:</b> Sebaran prediksi model ini lebih mendekati garis ideal pada grafik di atas.</li>
+            <li><b>Rekomendasi:</b> Gunakan model ini untuk prediksi kebijakan jangka pendek.</li>
+        </ul>
+    </div>
 </div>
 """
         st.markdown(insight_html, unsafe_allow_html=True)
