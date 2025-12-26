@@ -504,16 +504,14 @@ with tab4:
     st.dataframe(df_tbl, use_container_width=True)
 
 
-# ==========================================
-# TAB 5: EVALUASI MODEL
-# ==========================================
+# ====== TAB 5: EVALUASI (FIXED RENDER HTML) ======
 with tab5:
     st.subheader("📉 Evaluasi Performa Model")
     test_yr = years[-1]
     
     df_test = df[df[YEAR_COL] == test_yr].copy()
     if df_test.empty:
-        st.warning("Data testing tidak tersedia.")
+        st.warning("Data uji kosong.")
     else:
         # Hitung Metrik
         X_t = preprocessor.transform(df_test[feature_cols])
@@ -526,15 +524,30 @@ with tab5:
         mae_rf = mean_absolute_error(y_true, p_rf)
         rmse_mlp = np.sqrt(mean_squared_error(y_true, p_mlp))
         rmse_rf = np.sqrt(mean_squared_error(y_true, p_rf))
-        
+        r2_mlp = r2_score(y_true, p_mlp)
+        r2_rf = r2_score(y_true, p_rf)
+
+        # Kartu Metrik
+        best_model_name = "MLP (Neural Network)" if mae_mlp < mae_rf else "Random Forest"
+        best_mae_val = min(mae_mlp, mae_rf)
+        best_r2_val = max(r2_mlp, r2_rf)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🏆 Model Terbaik", best_model_name)
+        c2.metric("Rata-rata Error (MAE)", f"{best_mae_val:.0f} Kasus")
+        c3.metric("Akurasi (R²)", f"{best_r2_val:.1%}")
+
+        st.markdown("---")
+
         # Tabel Metrik
         met_df = pd.DataFrame({
             "Model": ["MLP (Neural Network)", "Random Forest"],
-            "MAE (Rata-rata Error)": [mae_mlp, mae_rf],
-            "RMSE (Error Kuadrat)": [rmse_mlp, rmse_rf]
+            "MAE": [mae_mlp, mae_rf],
+            "RMSE": [rmse_mlp, rmse_rf],
+            "R2": [r2_mlp, r2_rf]
         })
         st.table(met_df.set_index("Model").style.format("{:.2f}"))
-        
+
         # Scatter Plot
         fig_sc = go.Figure()
         fig_sc.add_trace(go.Scatter(x=y_true, y=p_mlp, mode='markers', name='MLP', marker=dict(color=COLOR_MLP, opacity=0.7)))
@@ -549,17 +562,17 @@ with tab5:
         
         # Menggunakan string biasa tanpa indentasi di dalam tag HTML
         insight_html = f"""
-        <div class='insight-box'>
-            <div class='insight-title'>💡 Kesimpulan Evaluasi Menyeluruh</div>
-            <div class='insight-content'>
-                <p>Berdasarkan pengujian data tahun terakhir (<b>{test_yr}</b>), model <b>{best_model_name}</b> menunjukkan performa yang lebih unggul.</p>
-                <p><b>Temuan Penting:</b></p>
-                <ul>
-                    <li><b>Akurasi:</b> Model {best_model_name} memiliki error <b>{improvement:.2f}</b> poin lebih kecil.</li>
-                    <li><b>Konsistensi:</b> Sebaran prediksi model ini lebih mendekati garis ideal pada grafik di atas.</li>
-                    <li><b>Rekomendasi:</b> Gunakan model ini untuk prediksi kebijakan jangka pendek.</li>
-                </ul>
-            </div>
-        </div>
-        """
+<div class='insight-box'>
+    <div class='insight-title'>💡 Kesimpulan Evaluasi Menyeluruh</div>
+    <div class='insight-content'>
+        <p>Berdasarkan pengujian data tahun terakhir (<b>{test_yr}</b>), model <b>{best_model_name}</b> menunjukkan performa yang lebih unggul.</p>
+        <p><b>Temuan Penting:</b></p>
+        <ul>
+            <li><b>Akurasi:</b> Model {best_model_name} memiliki error <b>{improvement:.2f}</b> poin lebih kecil.</li>
+            <li><b>Konsistensi:</b> Sebaran prediksi model ini lebih mendekati garis ideal pada grafik di atas.</li>
+            <li><b>Rekomendasi:</b> Gunakan model ini untuk prediksi kebijakan jangka pendek.</li>
+        </ul>
+    </div>
+</div>
+"""
         st.markdown(insight_html, unsafe_allow_html=True)
